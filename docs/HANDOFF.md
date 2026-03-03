@@ -3,8 +3,8 @@
 ## Current Status
 
 **Phase:** 3 - API & Evaluation
-**Step:** 7 - FastAPI Backend (COMPLETE)
-**Tests:** 211/211 passing (195 unit + 16 integration)
+**Step:** 8 - RAGAS Evaluation Framework (COMPLETE)
+**Tests:** 272/272 passing (256 unit + 16 integration)
 **Lint:** Clean (ruff + mypy)
 
 ## What's Been Done
@@ -166,13 +166,51 @@
 - **Integration tests** (12 new tests):
   - `tests/integration/test_api.py` - OpenAPI schema, route registration, middleware (request IDs, rate limits), CORS preflight, global error handler
 
+### Phase 3, Step 8 - RAGAS Evaluation Framework
+- **Evaluation metrics** (`src/evaluation/metrics.py`):
+  - `RAGMetrics` - LLM-as-judge scoring with 4 metrics (faithfulness, answer_relevancy, context_precision, context_recall)
+  - `MetricResult` - Per-metric result with score (0-1) and natural-language explanation
+  - `QuestionMetrics` - All 4 metrics for one question, with serialization
+  - `AggregateMetrics` - Batch statistics (mean, std, min, max) across questions
+  - `compute_aggregate()` - Computes aggregate stats from a list of per-question results
+  - Custom LLM-based prompts with structured JSON output, regex fallback parsing
+  - Per-metric error isolation: if one metric fails, others still complete
+- **Evaluation dataset** (`src/evaluation/dataset.py`):
+  - `QAPair` - Dataclass with question, ground_truth, contexts, category, metadata
+  - `EvalDataset` - Collection of Q&A pairs with load/save JSON, filter by category
+  - Built-in golden dataset support (default path: `tests/eval/eval_dataset.json`)
+- **Golden dataset** (`tests/eval/eval_dataset.json`):
+  - 18 hand-crafted Q&A pairs across 4 categories
+  - 10 straightforward (single-source, easy-medium difficulty)
+  - 3 multi-chunk (cross-document reasoning)
+  - 3 unanswerable (info not in corpus)
+  - 2 adversarial (false premise questions)
+  - All based on the 4 sample documents
+- **Evaluation runner** (`src/evaluation/runner.py`):
+  - `EvalRunner.run(dataset, chain)` → `EvalReport` with per-question + aggregate metrics
+  - `EvalReport` - Complete report with JSON and Markdown export, per-question scores + explanations
+  - `compare_reports()` - Compares two runs, categorizes changes as improvements/regressions/unchanged
+  - `ComparisonResult` - Improvements, regressions, unchanged metrics with summary
+  - Protocol-based interfaces (works with any RAGChain-compatible object)
+- **Evaluation script** (`scripts/run_eval.sh`):
+  - Configurable: --provider, --category, --k, --rerank-top-k, --dataset, --output
+  - Outputs summary table to console + saves JSON/Markdown reports to eval_results/
+  - Writes latest_scores.json for CI threshold checks
+- **CI workflow** (`.github/workflows/eval.yml`):
+  - Scheduled weekly (Sundays 2 AM UTC) + manual dispatch
+  - Quality gates: faithfulness >= 0.7, answer_relevancy >= 0.7
+  - Uploads evaluation artifacts (90-day retention)
+- **Unit tests** (61 new tests):
+  - `tests/unit/test_metrics.py` - 28 tests: LLM response parsing, clamping, metric results, question metrics, aggregate computation, RAGMetrics with mock LLM, error tolerance, prompt contents
+  - `tests/unit/test_eval_dataset.py` - 13 tests: QAPair defaults, dataset CRUD, filtering, categories, serialization roundtrip, golden dataset validation
+  - `tests/unit/test_eval_runner.py` - 20 tests: runner execution, chain calling, parameter passing, error handling, context fallback, auto run IDs, report serialization (JSON + Markdown), comparison (improvements, regressions, unchanged, missing metrics), dataset-runner integration
+
 ## What's Next
 
-**Phase 3 (continued)**: Evaluation & Polish
+**Phase 3 (continued)**: Polish & Production
 - Streaming response support (SSE)
-- RAGAS evaluation framework integration
-- End-to-end evaluation tests with sample documents
 - Performance optimization (async endpoints, connection pooling)
+- Streamlit UI improvements
 
 ## Key Files
 
@@ -200,7 +238,13 @@
 - `src/api/routes/health.py` - Health check with component status
 - `src/api/middleware/rate_limit.py` - Sliding-window per-IP rate limiter
 - `src/api/middleware/logging.py` - Request logging with correlation IDs
+- `src/evaluation/metrics.py` - RAGMetrics (LLM-as-judge with 4 metrics)
+- `src/evaluation/dataset.py` - EvalDataset, QAPair, load/save JSON
+- `src/evaluation/runner.py` - EvalRunner, EvalReport, compare_reports
+- `tests/eval/eval_dataset.json` - Golden dataset (18 Q&A pairs, 4 categories)
 - `scripts/seed_db.sh` - Seed ChromaDB with sample docs
+- `scripts/run_eval.sh` - Configurable evaluation runner script
+- `.github/workflows/eval.yml` - Scheduled evaluation with quality gates
 - `data/sample_docs/` - Sample technical documents for testing
 
 ## Architecture Decisions
@@ -227,3 +271,8 @@
 - **Middleware order** matters: CORS -> logging -> rate limiting (outermost first)
 - **Versioned API** prefix `/api/v1/` allows future API evolution without breaking clients
 - **Global exception handler** ensures all unhandled errors return a consistent JSON error format
+- **LLM-as-judge** evaluation uses custom prompts instead of RAGAS library directly for stability and transparency
+- **Per-metric error isolation** — if one metric eval fails, others still complete (no all-or-nothing failures)
+- **Protocol-based interfaces** — EvalRunner works with any object matching the RAGChain protocol (duck typing)
+- **Golden dataset** is hand-crafted from sample docs with 4 categories: straightforward, multi_chunk, unanswerable, adversarial
+- **Dual export** (JSON + Markdown) — JSON for CI/programmatic use, Markdown for human review

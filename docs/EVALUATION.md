@@ -1,154 +1,248 @@
-# Evaluation Methodology
+# Evaluation Framework
 
 ## Overview
 
-RAG systems need evaluation at multiple levels: retrieval quality, generation quality, and end-to-end performance. This document outlines the evaluation framework planned for Phase 3, using RAGAS as the primary evaluation library.
+The RAG evaluation framework uses **LLM-as-judge** scoring to measure four core metrics across faithfulness, relevancy, and context quality. A golden dataset of 18 hand-crafted Q&A pairs (based on the sample documents) provides repeatable benchmarks, and the evaluation runner produces structured reports with per-question and aggregate statistics.
 
-## Why Evaluate?
+## Architecture
 
-Without measurement, you can't improve. RAG systems have multiple failure modes:
-- **Retrieval failure** -- relevant documents aren't found
-- **Context overload** -- too many irrelevant documents dilute the signal
-- **Hallucination** -- the LLM invents information not in the context
-- **Citation errors** -- sources are misattributed or fabricated
-- **Incomplete answers** -- the answer misses key information from retrieved docs
+```
+┌──────────────────┐     ┌───────────────┐     ┌──────────────────┐
+│   EvalDataset    │────▶│   EvalRunner  │────▶│   EvalReport     │
+│  (Q&A pairs)     │     │               │     │  - per-question  │
+│  - 18 golden     │     │  For each Q:  │     │  - aggregate     │
+│  - categories    │     │  1. RAG query │     │  - latency       │
+│  - load/save     │     │  2. Score     │     │  - JSON/Markdown  │
+└──────────────────┘     │  3. Aggregate │     └──────────────────┘
+                         └───────┬───────┘
+                                 │
+                         ┌───────▼───────┐
+                         │  RAGMetrics   │
+                         │  (LLM judge)  │
+                         │               │
+                         │  4 metrics:   │
+                         │  faithfulness │
+                         │  relevancy   │
+                         │  precision   │
+                         │  recall      │
+                         └───────────────┘
+```
 
-Each failure mode requires a different metric to detect.
+## Metrics
 
-## RAGAS Metrics
+All metrics are scored **0.0 – 1.0** with a natural-language explanation.
 
-[RAGAS](https://docs.ragas.io/) (Retrieval Augmented Generation Assessment) provides a framework for evaluating RAG pipelines. We will track these core metrics:
+| Metric | What It Measures | How It's Computed |
+|--------|-----------------|-------------------|
+| **Faithfulness** | Are all claims in the answer supported by the retrieved contexts? | LLM lists claims in the answer, checks each against contexts, returns the fraction supported |
+| **Answer Relevancy** | Does the answer address the original question? | LLM evaluates completeness and relevance, penalizes off-topic content |
+| **Context Precision** | Are the retrieved contexts relevant to the question? | LLM checks each context for relevance to the question and ground truth |
+| **Context Recall** | Is all information needed to answer present in the contexts? | LLM identifies key facts in the ground truth, checks if contexts contain supporting information |
 
-### Retrieval Metrics
+### Aggregate Statistics
 
-| Metric | What it measures | Why it matters |
-|--------|-----------------|----------------|
-| **Context Precision** | Are the retrieved documents relevant to the question? | High precision means less noise in the context, leading to better answers. |
-| **Context Recall** | Does the retrieved context contain all the information needed to answer? | High recall ensures the LLM has the full picture. |
+For a batch of questions, we compute:
 
-### Generation Metrics
+| Statistic | Description |
+|-----------|-------------|
+| **Mean** | Average score across all questions |
+| **Std** | Standard deviation (consistency indicator) |
+| **Min** | Worst-case score |
+| **Max** | Best-case score |
+| **Count** | Number of questions scored |
 
-| Metric | What it measures | Why it matters |
-|--------|-----------------|----------------|
-| **Faithfulness** | Is every claim in the answer supported by the retrieved context? | The core metric for grounding. Low faithfulness = hallucination. |
-| **Answer Relevancy** | Does the answer actually address the question asked? | Prevents tangential or off-topic responses. |
+## Golden Dataset
 
-### End-to-End Metrics
+Located at `tests/eval/eval_dataset.json` — **18 Q&A pairs** across 4 categories:
 
-| Metric | What it measures | Why it matters |
-|--------|-----------------|----------------|
-| **Answer Correctness** | Is the answer factually correct compared to ground truth? | The ultimate quality measure. |
-| **Latency (p50, p95, p99)** | How long does the full pipeline take? | User experience and SLA compliance. |
-| **Token Usage** | How many tokens are consumed per query? | Cost optimization. |
+| Category | Count | Description |
+|----------|-------|-------------|
+| **Straightforward** | 10 | Single-source questions with clear answers |
+| **Multi-chunk** | 3 | Questions requiring information from multiple documents |
+| **Unanswerable** | 3 | Questions not answerable from the corpus |
+| **Adversarial** | 2 | Questions with false premises to test robustness |
 
-## Evaluation Dataset Design
+### Source Documents
 
-### Structure
+All Q&A pairs are based on the sample documents in `data/sample_docs/`:
 
-Each evaluation example consists of:
+- `rag_systems.md` — RAG architecture, chunking, hybrid search, evaluation
+- `ai_agents.md` — Agent patterns (ReAct, Plan-and-Execute), memory types
+- `transformer_architecture.md` — Self-attention, positional encoding, scaling laws
+- `mlops_best_practices.md` — MLOps lifecycle, experiment tracking, deployment
 
-```python
+### Dataset Format
+
+```json
 {
-    "question": "How does the attention mechanism work in transformers?",
-    "ground_truth": "The attention mechanism computes...",
-    "contexts": ["Retrieved chunk 1...", "Retrieved chunk 2..."],
-    "answer": "Generated answer from the RAG pipeline..."
+  "version": "1.0",
+  "total_pairs": 18,
+  "categories": {
+    "straightforward": 10,
+    "multi_chunk": 3,
+    "unanswerable": 3,
+    "adversarial": 2
+  },
+  "pairs": [
+    {
+      "question": "What are the five core components of a RAG system?",
+      "ground_truth": "The five core components are...",
+      "contexts": [],
+      "category": "straightforward",
+      "metadata": {"source_doc": "rag_systems.md", "difficulty": "easy"}
+    }
+  ]
 }
-```
-
-### Data Sources
-
-1. **Sample documents** -- The 4 technical articles in `data/sample_docs/` with hand-written Q&A pairs
-2. **Synthetic generation** -- LLM-generated questions from document chunks
-3. **Edge cases** -- Questions that require multi-hop reasoning, questions with no answer in the corpus, ambiguous queries
-
-### Planned Dataset Size
-
-| Split | Size | Purpose |
-|-------|------|---------|
-| Core | 20-30 | Hand-crafted, high-quality Q&A pairs for reliable benchmarking |
-| Extended | 100+ | Synthetically generated for stress testing |
-| Adversarial | 10-15 | Edge cases: unanswerable, ambiguous, multi-hop |
-
-## Pipeline-Level Evaluation
-
-Beyond RAGAS metrics, we will measure each pipeline stage independently:
-
-### Retrieval Evaluation
-
-```
-For each (question, ground_truth_chunks) pair:
-  1. Run retrieval (semantic, BM25, hybrid)
-  2. Measure Recall@k: what fraction of ground truth chunks are in top-k?
-  3. Measure MRR: where does the first relevant chunk appear?
-  4. Compare retriever configurations (weights, k values)
-```
-
-### Reranking Evaluation
-
-```
-For each (question, retrieved_results) pair:
-  1. Run reranking (cross-encoder, LLM)
-  2. Measure NDCG@k: are relevant docs ranked higher after reranking?
-  3. Measure reranking latency vs. accuracy tradeoff
-```
-
-### Generation Evaluation
-
-```
-For each (question, context, ground_truth) triple:
-  1. Generate answer via RAGChain
-  2. Measure faithfulness (RAGAS)
-  3. Measure answer relevancy (RAGAS)
-  4. Validate citations against retrieved sources
-  5. Measure citation accuracy: % of citations that are correct
 ```
 
 ## Running Evaluations
 
+### Quick Start
+
 ```bash
-# Run the full evaluation suite
+# Run full evaluation with all defaults
 make eval
 
-# Run specific evaluation tests
-pytest tests/eval/ -v --tb=long
+# Or directly:
+bash scripts/run_eval.sh
 ```
 
-## Metrics We Track in Production
+### Options
 
-The RAGResponse metadata already captures per-query metrics:
+```bash
+# Use a specific LLM provider
+bash scripts/run_eval.sh --provider claude
 
-| Metric | Source | Description |
-|--------|--------|-------------|
-| `latency_ms` | `RAGResponse.metadata` | Total pipeline latency |
-| `retrieve_ms` | `RAGResponse.metadata` | Retrieval stage latency |
-| `rerank_ms` | `RAGResponse.metadata` | Reranking stage latency |
-| `generate_ms` | `RAGResponse.metadata` | LLM generation latency |
-| `num_retrieved` | `RAGResponse.metadata` | Documents retrieved |
-| `num_reranked` | `RAGResponse.metadata` | Documents after reranking |
-| `num_citations` | `RAGResponse.metadata` | Valid citations in response |
-| `tokens_used` | `RAGResponse.metadata` | Input/output token counts |
-| `fallback_rate` | `FallbackLLM.fallback_stats` | How often the fallback LLM is used |
+# Evaluate only straightforward questions
+bash scripts/run_eval.sh --category straightforward
 
-These metrics will be exported to Prometheus via the metrics defined in `src/utils/monitoring.py` for dashboard monitoring.
+# Custom dataset
+bash scripts/run_eval.sh --dataset path/to/custom_dataset.json
 
-## Targets
+# Adjust retrieval parameters
+bash scripts/run_eval.sh --k 20 --rerank-top-k 10
+```
 
-Initial quality targets (to be refined after baseline measurement):
+### Output
 
-| Metric | Target | Rationale |
-|--------|--------|-----------|
-| Faithfulness | > 0.85 | Answers should be well-grounded |
-| Answer Relevancy | > 0.80 | Answers should address the question |
-| Context Precision | > 0.70 | Majority of retrieved docs should be relevant |
-| Context Recall | > 0.80 | Most needed information should be retrieved |
-| P95 Latency | < 5s | Acceptable for a conversational interface |
-| Citation Accuracy | > 0.90 | Nearly all citations should be valid |
+Results are saved to `eval_results/`:
 
-## Next Steps (Phase 3)
+- `eval-YYYYMMDD-HHMMSS.json` — Full report with per-question scores and explanations
+- `eval-YYYYMMDD-HHMMSS.md` — Human-readable Markdown summary
+- `latest_scores.json` — Aggregate scores for CI threshold checks
 
-1. Create evaluation dataset with hand-crafted Q&A pairs for sample documents
-2. Implement RAGAS evaluation runner in `tests/eval/`
-3. Add retrieval-specific metrics (Recall@k, MRR)
-4. Build evaluation reporting (JSON + HTML summary)
-5. Integrate metrics into CI (fail on quality regression)
+### Console Output
+
+```
+============================================================
+ EVALUATION RESULTS
+============================================================
+  faithfulness               0.8500 (+/- 0.1200)
+  answer_relevancy           0.8800 (+/- 0.0900)
+  context_precision          0.7600 (+/- 0.1500)
+  context_recall             0.8100 (+/- 0.1100)
+
+  Average latency:          2345.6 ms
+  Total latency:            42221.0 ms
+  Questions evaluated:      18
+============================================================
+```
+
+## Comparing Runs
+
+Use the `compare_reports()` function to track improvements and regressions between evaluation runs:
+
+```python
+from src.evaluation.runner import compare_reports, EvalReport
+import json
+from pathlib import Path
+
+baseline = EvalReport(**json.loads(Path("eval_results/baseline.json").read_text()))
+candidate = EvalReport(**json.loads(Path("eval_results/candidate.json").read_text()))
+
+comparison = compare_reports(baseline, candidate, threshold=0.01)
+
+print(comparison.summary)
+# +0.0500 faithfulness
+# -0.0200 context_precision
+# unchanged: answer_relevancy, context_recall
+```
+
+## CI Integration
+
+The `.github/workflows/eval.yml` workflow runs evaluations:
+
+- **Scheduled:** Weekly on Sundays at 2 AM UTC
+- **Manual:** Trigger via GitHub Actions with provider and category options
+- **Quality gates:** Fails if faithfulness < 0.7 or answer relevancy < 0.7
+- **Artifacts:** Results are uploaded and retained for 90 days
+
+## Quality Thresholds
+
+| Metric | CI Threshold | Target |
+|--------|-------------|--------|
+| Faithfulness | > 0.70 (fail CI) | > 0.85 |
+| Answer Relevancy | > 0.70 (fail CI) | > 0.80 |
+| Context Precision | — (monitored) | > 0.70 |
+| Context Recall | — (monitored) | > 0.80 |
+
+## Python API
+
+### Core Classes
+
+```python
+from src.evaluation.metrics import RAGMetrics, MetricResult, QuestionMetrics
+from src.evaluation.dataset import EvalDataset, QAPair
+from src.evaluation.runner import EvalRunner, EvalReport, compare_reports
+
+# Load dataset
+dataset = EvalDataset.load("tests/eval/eval_dataset.json")
+
+# Filter by category
+hard_questions = dataset.filter_by_category("multi_chunk")
+
+# Set up metrics (any LLM with .generate() method works)
+from src.generation.llm import LLMFactory
+llm = LLMFactory.create("claude")
+metrics = RAGMetrics(llm=llm)
+
+# Evaluate a single question
+result = metrics.evaluate_all(
+    question="What is RAG?",
+    answer="RAG is...",
+    contexts=["context 1", "context 2"],
+    ground_truth="RAG is a technique that..."
+)
+
+print(result.scores_dict())
+# {'faithfulness': 0.85, 'answer_relevancy': 0.9, ...}
+
+# Run full evaluation
+runner = EvalRunner(metrics=metrics, k=10, rerank_top_k=5)
+report = runner.run(dataset, chain)
+
+# Export
+report.save_json("eval_results/report.json")
+report.save_markdown("eval_results/report.md")
+```
+
+## Design Decisions
+
+### Why LLM-as-Judge Instead of RAGAS Library Directly?
+
+While RAGAS (ragas>=0.2.0) is included as a dependency, the evaluation framework uses custom LLM-based scoring for several reasons:
+
+1. **Stability** — RAGAS API changes frequently across versions; custom prompts provide a stable interface
+2. **Transparency** — Each metric has a clear prompt template that can be inspected and modified
+3. **Flexibility** — Works with any LLM that has a `generate()` method (Claude, GPT, local models)
+4. **Graceful degradation** — If one metric fails (LLM error), others still complete
+5. **Explainability** — Each score includes a natural-language explanation
+
+### Why Per-Question Error Isolation?
+
+Each metric evaluation is wrapped in a try/except. If the LLM fails to score faithfulness for one question, the runner continues to score answer relevancy, context precision, and context recall. This maximizes the amount of useful data collected even when individual evaluations fail.
+
+### Why JSON + Markdown Export?
+
+- **JSON** for programmatic consumption (CI threshold checks, trend analysis, dashboards)
+- **Markdown** for human review (pull requests, team communication, stakeholder reports)

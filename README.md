@@ -2,7 +2,7 @@
 
 A production-grade Retrieval-Augmented Generation system built from scratch in Python. Combines hybrid search (semantic + BM25), cross-encoder reranking, and dual-LLM generation with automatic fallback to deliver accurate, citation-backed answers grounded in your documents.
 
-**211 tests passing | Full CI/CD | Docker-ready | Structured logging throughout**
+**272 tests passing | Full CI/CD | Docker-ready | Evaluation framework | Structured logging throughout**
 
 ## Architecture
 
@@ -92,6 +92,14 @@ A production-grade Retrieval-Augmented Generation system built from scratch in P
 - **Graceful degradation** -- Each pipeline stage has error handling: retrieval failure, reranker failure, and LLM failure all produce meaningful responses
 - **Token tracking** -- Cumulative input/output token counts across all LLM calls
 
+### Evaluation Framework
+- **LLM-as-judge metrics** -- Faithfulness, answer relevancy, context precision, and context recall (all 0-1 with explanations)
+- **Golden dataset** -- 18 hand-crafted Q&A pairs across 4 categories (straightforward, multi-chunk, unanswerable, adversarial)
+- **Evaluation runner** -- Orchestrates RAG evaluation with per-question and aggregate metrics, latency tracking
+- **Report export** -- JSON for CI/programmatic use, Markdown for human review
+- **Run comparison** -- Detect improvements, regressions, and unchanged metrics between evaluation runs
+- **CI quality gates** -- Weekly scheduled evaluation, fail if faithfulness or relevancy drops below 0.7
+
 ### Production-Ready
 - **FastAPI** with versioned API (`/api/v1/`), OpenAPI docs, CORS, and global error handling
 - **Rate limiting** -- Sliding-window per-IP rate limiter with standard headers (X-RateLimit-Limit/Remaining)
@@ -99,8 +107,8 @@ A production-grade Retrieval-Augmented Generation system built from scratch in P
 - **Structured logging** via structlog (JSON in production, console in dev)
 - **Prometheus metrics** definitions for monitoring
 - **Docker** multi-stage build + docker-compose (API + ChromaDB + Streamlit UI)
-- **GitHub Actions CI** -- lint, type-check, test on every push/PR
-- **211 passing tests** covering unit, integration, and edge cases
+- **GitHub Actions CI** -- lint, type-check, test on every push/PR + scheduled evaluation workflow
+- **272 passing tests** covering unit, integration, and edge cases
 
 ## Quick Start
 
@@ -261,13 +269,17 @@ rag-pipeline-production/
 │   │   ├── prompts.py          # RAG prompt templates + formatters
 │   │   ├── chain.py            # RAGChain orchestrator + RAGResponse
 │   │   └── response_parser.py  # Citation parsing + validation
+│   ├── evaluation/
+│   │   ├── metrics.py          # RAGMetrics (LLM-as-judge, 4 metrics)
+│   │   ├── dataset.py          # EvalDataset, QAPair, load/save JSON
+│   │   └── runner.py           # EvalRunner, EvalReport, comparison
 │   ├── models/
 │   │   └── document.py         # Universal Document model (Pydantic)
 │   └── utils/
 │       ├── logger.py           # Structlog configuration
 │       └── monitoring.py       # Prometheus metrics
 ├── tests/
-│   ├── unit/                   # 195 unit tests
+│   ├── unit/                   # 256 unit tests
 │   │   ├── test_loader.py      #   Document loaders (13 tests)
 │   │   ├── test_chunker.py     #   Chunking strategies (21 tests)
 │   │   ├── test_embedder.py    #   OpenAI embedder (10 tests)
@@ -281,7 +293,12 @@ rag-pipeline-production/
 │   │   ├── test_api_query.py   #   Query endpoint (11 tests)
 │   │   ├── test_api_ingest.py  #   Ingest endpoints (11 tests)
 │   │   ├── test_api_evaluate.py #  Evaluate endpoint (8 tests)
-│   │   └── test_api_health.py  #   Health endpoint (4 tests)
+│   │   ├── test_api_health.py  #   Health endpoint (4 tests)
+│   │   ├── test_metrics.py     #   Evaluation metrics (28 tests)
+│   │   ├── test_eval_dataset.py #  Evaluation dataset (13 tests)
+│   │   └── test_eval_runner.py #   Evaluation runner (20 tests)
+│   ├── eval/
+│   │   └── eval_dataset.json   # Golden dataset (18 Q&A pairs)
 │   └── integration/            # 16 integration tests
 │       ├── test_ingestion_pipeline.py  # Ingestion pipeline (4 tests)
 │       └── test_api.py         #   API integration (12 tests)
@@ -289,7 +306,8 @@ rag-pipeline-production/
 │   └── sample_docs/            # 4 technical articles (AI agents, MLOps, etc.)
 ├── scripts/
 │   ├── setup.sh                # Environment setup
-│   └── seed_db.sh              # Load → chunk → embed → store pipeline
+│   ├── seed_db.sh              # Load → chunk → embed → store pipeline
+│   └── run_eval.sh             # Configurable evaluation runner
 ├── docker/
 │   ├── Dockerfile              # Multi-stage production build
 │   └── docker-compose.yml      # API + ChromaDB + Streamlit UI
@@ -298,7 +316,9 @@ rag-pipeline-production/
 │   ├── DEPLOYMENT.md           # Deployment guide
 │   ├── EVALUATION.md           # Evaluation methodology
 │   └── HANDOFF.md              # Development handoff document
-├── .github/workflows/ci.yml    # GitHub Actions (lint, type-check, test)
+├── .github/workflows/
+│   ├── ci.yml                  # GitHub Actions (lint, type-check, test)
+│   └── eval.yml                # Scheduled evaluation with quality gates
 ├── pyproject.toml              # Dependencies, build config, tool settings
 ├── Makefile                    # Development commands
 └── .env.example                # Environment variable template
@@ -319,7 +339,8 @@ rag-pipeline-production/
 | **Config** | Pydantic Settings | Type-safe configuration from .env |
 | **Logging** | structlog | Structured JSON logging with context |
 | **Retry** | tenacity | Exponential backoff for API calls |
-| **Testing** | pytest + pytest-asyncio | 211 tests, async support, coverage |
+| **Evaluation** | Custom LLM-as-judge | 4 metrics: faithfulness, relevancy, precision, recall |
+| **Testing** | pytest + pytest-asyncio | 272 tests, async support, coverage |
 | **Linting** | ruff + mypy | Fast linting + strict type checking |
 | **CI/CD** | GitHub Actions | Lint, type-check, test on push/PR |
 | **Containers** | Docker + Compose | Multi-stage build, 3-service stack |
@@ -328,7 +349,7 @@ rag-pipeline-production/
 ## Testing
 
 ```bash
-# Run all 211 tests
+# Run all 272 tests
 make test
 
 # Run with coverage report
@@ -342,10 +363,16 @@ pytest tests/integration/ -v
 
 # Run only API tests
 pytest tests/unit/test_api_*.py tests/integration/test_api.py -v
+
+# Run only evaluation tests
+pytest tests/unit/test_metrics.py tests/unit/test_eval_runner.py tests/unit/test_eval_dataset.py -v
+
+# Run RAG evaluation against golden dataset
+make eval
 ```
 
 **Test breakdown:**
-- Unit tests: 195 (loaders, chunkers, embedder, cache, retrievers, rerankers, LLM, prompts, chain, API endpoints)
+- Unit tests: 256 (loaders, chunkers, embedder, cache, retrievers, rerankers, LLM, prompts, chain, API endpoints, evaluation metrics/dataset/runner)
 - Integration tests: 16 (ingestion pipeline + full API request/response cycle)
 
 All external APIs (OpenAI, Anthropic, ChromaDB) are mocked in tests -- no API keys required to run the test suite.

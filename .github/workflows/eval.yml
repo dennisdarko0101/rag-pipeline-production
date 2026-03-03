@@ -1,0 +1,94 @@
+name: Evaluation
+
+on:
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "LLM provider (claude, openai, fallback)"
+        required: false
+        default: "fallback"
+      category:
+        description: "Filter to category (leave empty for all)"
+        required: false
+        default: ""
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run evaluation
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          PROVIDER="${{ github.event.inputs.provider || 'fallback' }}"
+          CATEGORY="${{ github.event.inputs.category || '' }}"
+
+          ARGS="--provider $PROVIDER"
+          if [ -n "$CATEGORY" ]; then
+            ARGS="$ARGS --category $CATEGORY"
+          fi
+
+          bash scripts/run_eval.sh $ARGS
+
+      - name: Check quality thresholds
+        run: |
+          python3 -c "
+          import json, sys
+          from pathlib import Path
+
+          scores_file = Path('eval_results/latest_scores.json')
+          if not scores_file.exists():
+              print('ERROR: No scores file found')
+              sys.exit(1)
+
+          scores = json.loads(scores_file.read_text())
+
+          THRESHOLDS = {
+              'faithfulness': 0.7,
+              'answer_relevancy': 0.7,
+          }
+
+          failed = False
+          for metric, threshold in THRESHOLDS.items():
+              stats = scores.get(metric, {})
+              mean = stats.get('mean')
+              if mean is None:
+                  print(f'WARNING: {metric} not available')
+                  continue
+              if mean < threshold:
+                  print(f'FAIL: {metric} = {mean:.4f} (threshold: {threshold})')
+                  failed = True
+              else:
+                  print(f'PASS: {metric} = {mean:.4f} (threshold: {threshold})')
+
+          if failed:
+              print()
+              print('Quality thresholds not met!')
+              sys.exit(1)
+          else:
+              print()
+              print('All quality thresholds passed.')
+          "
+
+      - name: Upload eval results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results-${{ github.run_id }}
+          path: eval_results/
+          retention-days: 90

@@ -225,6 +225,21 @@ Reranked Results (top-k documents)
 | `RateLimitMiddleware` | `middleware/rate_limit.py` | Sliding-window per-IP rate limiter with X-RateLimit headers |
 | `RequestLoggingMiddleware` | `middleware/logging.py` | Correlation IDs (X-Request-ID), per-request timing |
 
+### Evaluation (`src/evaluation/`)
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `RAGMetrics` | `metrics.py` | LLM-as-judge scorer: faithfulness, answer_relevancy, context_precision, context_recall |
+| `MetricResult` | `metrics.py` | Per-metric result with score (0-1) and explanation |
+| `QuestionMetrics` | `metrics.py` | All 4 metrics for one question, serializable to dict |
+| `AggregateMetrics` | `metrics.py` | Batch statistics: mean, std, min, max per metric |
+| `compute_aggregate()` | `metrics.py` | Computes aggregate stats from a list of QuestionMetrics |
+| `QAPair` | `dataset.py` | Dataclass: question, ground_truth, contexts, category, metadata |
+| `EvalDataset` | `dataset.py` | Collection of Q&A pairs with load/save JSON, filter by category |
+| `EvalRunner` | `runner.py` | Orchestrates evaluation: runs RAGChain on each Q&A pair, scores with RAGMetrics |
+| `EvalReport` | `runner.py` | Complete report: per-question metrics, aggregate stats, JSON/Markdown export |
+| `compare_reports()` | `runner.py` | Compares two EvalReports, categorizes changes as improvements/regressions/unchanged |
+
 ## Design Decisions
 
 ### Why ChromaDB?
