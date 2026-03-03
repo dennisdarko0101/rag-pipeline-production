@@ -18,6 +18,7 @@ COPY --from=base /usr/local/bin /usr/local/bin
 
 COPY src/ src/
 COPY ui/ ui/
+COPY tests/eval/eval_dataset.json tests/eval/eval_dataset.json
 
 RUN mkdir -p data/chroma
 

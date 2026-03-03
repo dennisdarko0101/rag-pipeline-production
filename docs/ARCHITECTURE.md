@@ -2,27 +2,29 @@
 
 ## System Overview
 
-The RAG pipeline processes documents and user queries through four major stages:
+The RAG pipeline processes documents and user queries through four major stages, with a Streamlit UI layer on top:
 
 ```
- INGESTION                 STORAGE              RETRIEVAL              GENERATION
- ─────────                 ───────              ─────────              ──────────
+ UI (Streamlit)           INGESTION            STORAGE              RETRIEVAL              GENERATION
+ ──────────────           ─────────            ───────              ─────────              ──────────
 
- ┌────────┐               ┌─────────┐          ┌──────────┐          ┌──────────┐
- │ Loader │──▶ Preprocess  │ChromaDB │◀── Embed │ Semantic │──┐      │ RAGChain │
- │PDF/MD/ │    ──▶ Chunk   │ Vector  │          │Retriever │  │ RRF  │ Context  │
- │Txt/Web │    ──▶ Embed   │ Store   │          └──────────┘  ├─────▶│ Format   │
- └────────┘    ──▶ Store   │         │          ┌──────────┐  │      │ Generate │
-                           │ (cosine │          │  BM25    │──┘      │ Parse    │
-                           │  HNSW)  │          │Retriever │         └────┬─────┘
-                           └─────────┘          └──────────┘              │
-                                                      │                   ▼
-                                                      ▼            ┌──────────┐
-                                                ┌──────────┐       │ Fallback │
-                                                │ Reranker │       │   LLM    │
-                                                │CrossEnc. │       │Claude/GPT│
-                                                │ or LLM   │       └──────────┘
-                                                └──────────┘
+ ┌──────────┐
+ │Streamlit │ httpx
+ │ Chat tab │──────▶┌────────┐               ┌─────────┐          ┌──────────┐          ┌──────────┐
+ │ Eval tab │       │ Loader │──▶ Preprocess  │ChromaDB │◀── Embed │ Semantic │──┐      │ RAGChain │
+ │ Sidebar  │       │PDF/MD/ │    ──▶ Chunk   │ Vector  │          │Retriever │  │ RRF  │ Context  │
+ │  Config  │       │Txt/Web │    ──▶ Embed   │ Store   │          └──────────┘  ├─────▶│ Format   │
+ │  Status  │       └────────┘    ──▶ Store   │         │          ┌──────────┐  │      │ Generate │
+ │  Ingest  │                                 │ (cosine │          │  BM25    │──┘      │ Parse    │
+ └──────────┘                                 │  HNSW)  │          │Retriever │         └────┬─────┘
+       │                                      └─────────┘          └──────────┘              │
+       │  FastAPI                                                        │                   ▼
+       └──▶ :8000                                                        ▼            ┌──────────┐
+                                                                   ┌──────────┐       │ Fallback │
+                                                                   │ Reranker │       │   LLM    │
+                                                                   │CrossEnc. │       │Claude/GPT│
+                                                                   │ or LLM   │       └──────────┘
+                                                                   └──────────┘
 ```
 
 ## Data Flow
@@ -294,6 +296,19 @@ LLMs hallucinate. Even when instructed to cite only from provided context, model
 
 This ensures every citation in the final response points to a document that was actually retrieved and used as context.
 
+### UI (`ui/`)
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `app` | `app.py` | Streamlit dashboard: sidebar (config, status, ingestion), chat tab, evaluation tab |
+| `api_client` | `api_client.py` | httpx HTTP client wrapping all FastAPI endpoints (health, query, ingest, evaluate) |
+| `metric_card()` | `components.py` | Color-coded metric display (green >= 0.8, yellow >= 0.6, red < 0.6) |
+| `source_card()` | `components.py` | Retrieved source with relevance score bar and truncated content |
+| `pipeline_timeline()` | `components.py` | Visual timeline of pipeline stage timings (retrieve, rerank, generate) |
+| `status_indicator()` | `components.py` | Green/red status dot for system health display |
+| `COLORS` | `config.py` | Dark theme color palette (slate/indigo), API connection settings |
+| `score_color()` | `config.py` | Maps score to color hex based on thresholds |
+
 ### Error Handling Strategy
 
 The RAG chain uses **graceful degradation** at every stage:
@@ -307,3 +322,13 @@ The RAG chain uses **graceful degradation** at every stage:
 | Citation parsing | Invalid citations | Strips invalid ones, keeps valid ones |
 
 This means the system never crashes on a user query -- it always returns a meaningful response, even if degraded.
+
+### Why Streamlit for the UI?
+
+Streamlit was chosen for the demo dashboard because:
+- **Rapid prototyping** -- build a full interactive UI in pure Python, no frontend framework required
+- **Built-in chat components** -- `st.chat_message` and `st.chat_input` provide a native chat experience
+- **Session state** -- conversation history and evaluation results persist across rerenders
+- **Docker-friendly** -- lightweight container, easy to add to the existing compose stack
+
+The UI communicates with the backend **exclusively via httpx HTTP calls** (through `ui/api_client.py`), never importing internal Python modules. This enforces a clean boundary: the UI is a consumer of the REST API, just like any external client. This means the UI can be replaced with a React/Next.js frontend without touching the backend.

@@ -2,7 +2,7 @@
 
 A production-grade Retrieval-Augmented Generation system built from scratch in Python. Combines hybrid search (semantic + BM25), cross-encoder reranking, and dual-LLM generation with automatic fallback to deliver accurate, citation-backed answers grounded in your documents.
 
-**272 tests passing | Full CI/CD | Docker-ready | Evaluation framework | Structured logging throughout**
+**272 tests passing | Full CI/CD | Docker-ready | Evaluation framework | Streamlit UI | Structured logging throughout**
 
 ## Architecture
 
@@ -10,6 +10,14 @@ A production-grade Retrieval-Augmented Generation system built from scratch in P
                             RAG Pipeline Architecture
  ┌─────────────────────────────────────────────────────────────────────────────┐
  │                                                                             │
+ │  ┌──────────────────────────────────────────────────────────────────────┐   │
+ │  │  Streamlit UI (port 8501)                                           │   │
+ │  │  Chat tab ─ Eval tab ─ Sidebar (config, status, ingestion)          │   │
+ │  │  Communicates via httpx ──▶ FastAPI backend                          │   │
+ │  └──────────────────────────────────────┬───────────────────────────────┘   │
+ │                         UI LAYER        │                                   │
+ │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │
+ │                                          ▼                                  │
  │  ┌──────────┐   ┌────────────┐   ┌───────────┐   ┌──────────────────────┐  │
  │  │  Loader   │──▶│ Preprocessor│──▶│  Chunker  │──▶│  OpenAI Embedder    │  │
  │  │ PDF/MD/   │   │ Clean/Dedup│   │ Recursive │   │  + Embedding Cache   │  │
@@ -100,6 +108,14 @@ A production-grade Retrieval-Augmented Generation system built from scratch in P
 - **Run comparison** -- Detect improvements, regressions, and unchanged metrics between evaluation runs
 - **CI quality gates** -- Weekly scheduled evaluation, fail if faithfulness or relevancy drops below 0.7
 
+### Streamlit Dashboard
+- **Interactive chat UI** -- Ask questions, view answers with expandable source cards and pipeline timing breakdown
+- **Document ingestion** -- Upload PDFs, Markdown, or text files directly from the sidebar, or paste a URL
+- **Evaluation tab** -- Run the golden dataset evaluation, view aggregate metric cards and per-question results table
+- **System status** -- Live API and vector store health indicators in the sidebar
+- **Dark theme** -- Professional dark slate/indigo theme with custom CSS, color-coded metrics (green/yellow/red)
+- **Configuration panel** -- Adjust LLM provider, retrieval k, reranking toggle, and rerank top-k from the sidebar
+
 ### Production-Ready
 - **FastAPI** with versioned API (`/api/v1/`), OpenAPI docs, CORS, and global error handling
 - **Rate limiting** -- Sliding-window per-IP rate limiter with standard headers (X-RateLimit-Limit/Remaining)
@@ -159,6 +175,14 @@ make run
 ```
 
 API available at `http://localhost:8000` -- interactive docs at `http://localhost:8000/docs`.
+
+### Launch the UI
+
+```bash
+make run-ui
+```
+
+Streamlit dashboard available at `http://localhost:8501`. Requires the API server to be running.
 
 ### Docker
 
@@ -302,6 +326,11 @@ rag-pipeline-production/
 │   └── integration/            # 16 integration tests
 │       ├── test_ingestion_pipeline.py  # Ingestion pipeline (4 tests)
 │       └── test_api.py         #   API integration (12 tests)
+├── ui/
+│   ├── app.py                  # Streamlit dashboard (chat + eval tabs)
+│   ├── api_client.py           # httpx client for FastAPI backend
+│   ├── components.py           # MetricCard, SourceCard, PipelineTimeline
+│   └── config.py               # Page config, API URL, theme colors
 ├── data/
 │   └── sample_docs/            # 4 technical articles (AI agents, MLOps, etc.)
 ├── scripts/

@@ -2,8 +2,8 @@
 
 ## Current Status
 
-**Phase:** 3 - API & Evaluation
-**Step:** 8 - RAGAS Evaluation Framework (COMPLETE)
+**Phase:** 3 - API, Evaluation & UI
+**Step:** 9 - Streamlit Demo Dashboard (COMPLETE)
 **Tests:** 272/272 passing (256 unit + 16 integration)
 **Lint:** Clean (ruff + mypy)
 
@@ -205,12 +205,39 @@
   - `tests/unit/test_eval_dataset.py` - 13 tests: QAPair defaults, dataset CRUD, filtering, categories, serialization roundtrip, golden dataset validation
   - `tests/unit/test_eval_runner.py` - 20 tests: runner execution, chain calling, parameter passing, error handling, context fallback, auto run IDs, report serialization (JSON + Markdown), comparison (improvements, regressions, unchanged, missing metrics), dataset-runner integration
 
+### Phase 3, Step 9 - Streamlit Demo Dashboard
+- **Dashboard app** (`ui/app.py`):
+  - Dark-theme Streamlit app with custom CSS injection (slate/indigo palette)
+  - Sidebar: LLM provider selectbox, retrieval k slider, reranking toggle, rerank_top_k slider
+  - Sidebar: live system status (API server + vector store health indicators)
+  - Sidebar: document ingestion via file upload (PDF/MD/TXT) or URL paste
+  - Chat tab: full conversation history with `st.chat_message`, expandable source cards with relevance bars, pipeline timing breakdown
+  - Evaluation tab: run golden dataset, aggregate metric cards, per-question results table
+  - Session state for chat_history and eval_results
+- **Reusable components** (`ui/components.py`):
+  - `metric_card()` -- Color-coded metric card (green >= 0.8, yellow >= 0.6, red < 0.6)
+  - `source_card()` -- Retrieved source with relevance score bar and truncated content
+  - `pipeline_timeline()` -- Visual timeline of retrieve/rerank/generate timings with percentage bars
+  - `status_indicator()` -- Green/red status dot with label
+- **HTTP client** (`ui/api_client.py`):
+  - All UI ↔ backend communication via httpx (never imports internal Python modules)
+  - `check_health()`, `query()`, `ingest_file()`, `ingest_url()`, `evaluate()`
+  - Graceful error handling: returns `{"error": True, "detail": ...}` on failure
+- **Configuration** (`ui/config.py`):
+  - Page config (title, icon, layout), API base URL from `API_BASE_URL` env var
+  - Theme color palette (`COLORS` dict), `score_color()` and `score_label()` helpers
+- **Docker updates**:
+  - API service healthcheck (python httpx GET /health)
+  - UI service depends on api with `condition: service_healthy`
+  - UI service sets `API_BASE_URL=http://api:8000` for Docker networking
+  - Dockerfile copies `tests/eval/eval_dataset.json` for golden dataset access
+
 ## What's Next
 
-**Phase 3 (continued)**: Polish & Production
+**Phase 4**: Polish & Production
 - Streaming response support (SSE)
 - Performance optimization (async endpoints, connection pooling)
-- Streamlit UI improvements
+- Advanced UI features (conversation export, multi-session support)
 
 ## Key Files
 
@@ -242,6 +269,10 @@
 - `src/evaluation/dataset.py` - EvalDataset, QAPair, load/save JSON
 - `src/evaluation/runner.py` - EvalRunner, EvalReport, compare_reports
 - `tests/eval/eval_dataset.json` - Golden dataset (18 Q&A pairs, 4 categories)
+- `ui/app.py` - Streamlit dashboard (chat + eval tabs, sidebar)
+- `ui/api_client.py` - httpx HTTP client for FastAPI backend
+- `ui/components.py` - Reusable UI components (metric_card, source_card, pipeline_timeline, status_indicator)
+- `ui/config.py` - Page config, API URL, theme colors, score helpers
 - `scripts/seed_db.sh` - Seed ChromaDB with sample docs
 - `scripts/run_eval.sh` - Configurable evaluation runner script
 - `.github/workflows/eval.yml` - Scheduled evaluation with quality gates
@@ -276,3 +307,7 @@
 - **Protocol-based interfaces** — EvalRunner works with any object matching the RAGChain protocol (duck typing)
 - **Golden dataset** is hand-crafted from sample docs with 4 categories: straightforward, multi_chunk, unanswerable, adversarial
 - **Dual export** (JSON + Markdown) — JSON for CI/programmatic use, Markdown for human review
+- **UI communicates via HTTP only** — `ui/api_client.py` uses httpx, never imports internal Python modules; clean boundary allows swapping frontends
+- **Dark theme** with custom CSS injection — slate/indigo palette matches modern data tool aesthetics
+- **Session state** for chat history and eval results — persists across Streamlit rerenders within a session
+- **Docker health dependencies** — UI waits for API to be healthy before starting, preventing connection errors on cold boot

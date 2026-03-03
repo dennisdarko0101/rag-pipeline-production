@@ -12,6 +12,12 @@ services:
     depends_on:
       - chromadb
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   chromadb:
     image: chromadb/chroma:latest
@@ -30,8 +36,11 @@ services:
       - "8501:8501"
     env_file:
       - ../.env
+    environment:
+      - API_BASE_URL=http://api:8000
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

@@ -74,7 +74,19 @@ make run-ui
 # equivalent to: streamlit run ui/app.py
 ```
 
-Available at `http://localhost:8501`.
+Available at `http://localhost:8501`. Requires the API server to be running (the UI calls the backend via HTTP).
+
+The UI provides:
+- **Chat tab** -- Ask questions, view answers with expandable source cards and pipeline metrics
+- **Evaluation tab** -- Run the golden dataset, view aggregate metrics and per-question results
+- **Sidebar** -- LLM provider selector, retrieval k slider, reranking toggle, system health status, document ingestion (file upload or URL)
+
+#### UI Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_BASE_URL` | `http://localhost:8000` | Backend API URL (set to `http://api:8000` in Docker) |
+| `API_TIMEOUT` | `120` | Request timeout in seconds |
 
 ### Running Tests
 
@@ -126,7 +138,9 @@ The `docker/Dockerfile` uses a multi-stage build:
 The `docker/docker-compose.yml` defines:
 - Shared `chroma_data` volume for ChromaDB persistence
 - `.env` file mounted for API keys
-- Health check dependencies between services
+- API health check (httpx GET /health) used for service dependency ordering
+- UI service waits for API to be healthy before starting (`depends_on: condition: service_healthy`)
+- UI service sets `API_BASE_URL=http://api:8000` for Docker networking
 
 ### Custom Docker Build
 
@@ -257,6 +271,6 @@ GitHub Actions runs on every push and PR to `main`:
 | Lint | `ruff check` | Code quality and style rules |
 | Format | `ruff format --check` | Consistent code formatting |
 | Type check | `mypy` | Static type analysis (strict mode) |
-| Test | `pytest --cov` | All 211 tests + coverage upload to Codecov |
+| Test | `pytest --cov` | All 272 tests + coverage upload to Codecov |
 
 Configuration: `.github/workflows/ci.yml`
