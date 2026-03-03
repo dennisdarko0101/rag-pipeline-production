@@ -3,7 +3,7 @@
 ## Current Status
 
 **Phase:** 1 - Foundation
-**Step:** 2 - Document ingestion pipeline (COMPLETE)
+**Step:** 3 - Embeddings & Vector Store (COMPLETE)
 
 ## What's Been Done
 
@@ -45,29 +45,66 @@
   - `mlops_best_practices.md` - MLOps lifecycle, experiment tracking, deployment patterns
   - `transformer_architecture.md` - Transformer internals (attention, positional encoding, scaling)
   - `rag_systems.md` - RAG system design, chunking strategies, evaluation
+
+### Phase 1, Step 3 - Embeddings & Vector Store
+- **Embedding models** (`src/embeddings/embedder.py`):
+  - `BaseEmbedder` - Abstract base class with `embed_text()`, `embed_batch()`, `aembed_batch()`
+  - `OpenAIEmbedder` - Wraps OpenAI text-embedding-3-small with batch support
+  - Configurable batch_size (default 100), automatic batch splitting
+  - Retry logic with tenacity (3 attempts, exponential backoff)
+  - Token counting via tiktoken, automatic text truncation to model limits
+  - Async support via `openai.AsyncOpenAI`
+  - Structlog logging on every embed call (text length, latency, model, dimensions)
+- **Embedding cache** (`src/embeddings/cache.py`):
+  - `EmbeddingCache` - File-based caching with SHA-256 keys (model+text)
+  - Stored as JSON in sharded subdirectories (2-char prefix)
+  - Optional TTL support for cache expiration
+  - Cache stats: hits, misses, total cached, hit rate
+  - `CachedEmbedder` - Wraps any `BaseEmbedder`, checks cache before API calls
+  - Batch-aware caching: only uncached texts are sent to the API
+- **Vector store interface** (`src/vectorstore/base.py`):
+  - `VectorStore` - Abstract interface with `add_documents()`, `search()`, `delete()`, `get_stats()`
+  - `SearchResult` - Dataclass with document, score, rank
+- **ChromaDB implementation** (`src/vectorstore/chroma_store.py`):
+  - `ChromaVectorStore` - Persistent ChromaDB with configurable distance metric (cosine, l2, ip)
+  - Collection management (create, delete, list)
+  - Batch upsert in chunks of 500 for large document sets
+  - Metadata filtering on search (ChromaDB where clauses)
+  - Metadata sanitization (ChromaDB only supports str/int/float/bool)
+  - Distance-to-similarity score conversion
+- **Seed script** (`scripts/seed_db.sh`):
+  - Loads all sample docs from data/sample_docs/
+  - Preprocesses, chunks, embeds via OpenAI, stores in ChromaDB
+  - Prints stats (total docs, chunks, collection size)
 - **Unit tests**:
-  - `tests/unit/test_loader.py` - Tests for Markdown, Text, and Web loaders, error handling, factory
-  - `tests/unit/test_chunker.py` - Tests for recursive/semantic chunking, metadata preservation, edge cases
+  - `tests/unit/test_embedder.py` - Mock OpenAI API, batch splitting, retry logic, token counting, dimensions
+  - `tests/unit/test_cache.py` - Cache hit/miss, TTL, stats, CachedEmbedder routing
+- **Integration test**:
+  - `tests/integration/test_ingestion_pipeline.py` - End-to-end: load → chunk → embed → store → search, metadata filtering
 
 ## What's Next
 
-**Phase 1, Step 3**: Embedding pipeline
-- Embedding model integration (OpenAI text-embedding-3-small)
-- Vector store setup (ChromaDB)
-- Batch embedding with rate limiting
-- Unit tests for embedding pipeline
+**Phase 2, Step 1**: Retrieval pipeline
+- BM25 sparse retrieval
+- Hybrid search (dense + sparse)
+- Reranking with cross-encoder
+- Query expansion / HyDE
+- Unit tests for retrieval
 
 ## Key Files
 
-- `src/config/settings.py` - All configuration (chunk_size, chunk_overlap, embedding_model, etc.)
+- `src/config/settings.py` - All configuration (chunk_size, embedding_model, chroma_persist_dir, etc.)
 - `src/models/document.py` - Universal Document model
 - `src/ingestion/loader.py` - Document loaders (PDF, Markdown, Text, Web)
 - `src/ingestion/chunker.py` - Chunking strategies (Recursive, Semantic)
 - `src/ingestion/preprocessor.py` - Text cleaning, metadata extraction, dedup
+- `src/embeddings/embedder.py` - BaseEmbedder + OpenAIEmbedder
+- `src/embeddings/cache.py` - EmbeddingCache + CachedEmbedder
+- `src/vectorstore/base.py` - VectorStore interface + SearchResult
+- `src/vectorstore/chroma_store.py` - ChromaDB implementation
 - `src/api/main.py` - FastAPI app entry point
-- `src/api/schemas.py` - API request/response models
+- `scripts/seed_db.sh` - Seed ChromaDB with sample docs
 - `data/sample_docs/` - Sample technical documents for testing
-- `.github/workflows/ci.yml` - CI pipeline
 
 ## Architecture Decisions
 
@@ -76,3 +113,7 @@
 - **Chunkers** are configurable via `settings.chunk_size` and `settings.chunk_overlap`
 - **Preprocessing** uses a pipeline pattern (clean -> enrich -> dedup) for composability
 - **Fingerprinting** uses SHA-256 on normalized text for reliable deduplication
+- **Embedder** uses Decorator pattern (`CachedEmbedder` wraps any `BaseEmbedder`) for composable caching
+- **Embedding cache** is file-based with sharded directories to avoid filesystem limits on large caches
+- **Vector store** uses Abstract Factory pattern - swap ChromaDB for Pinecone/Qdrant by implementing `VectorStore`
+- **ChromaDB metadata** is sanitized automatically (lists → comma-separated strings, None values dropped)
