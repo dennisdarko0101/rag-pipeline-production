@@ -226,6 +226,82 @@ report.save_json("eval_results/report.json")
 report.save_markdown("eval_results/report.md")
 ```
 
+## Adding New Test Cases
+
+To add Q&A pairs to the golden dataset:
+
+### 1. Edit the dataset file
+
+```bash
+# Open the dataset
+$EDITOR tests/eval/eval_dataset.json
+```
+
+Add a new entry to the `pairs` array:
+
+```json
+{
+  "question": "Your new question?",
+  "ground_truth": "The expected answer based on the source documents.",
+  "contexts": [],
+  "category": "straightforward",
+  "metadata": {
+    "source_doc": "rag_systems.md",
+    "difficulty": "medium"
+  }
+}
+```
+
+### 2. Update the counts
+
+Update `total_pairs` and the category count in the top-level object.
+
+### 3. Verify the dataset loads
+
+```python
+from src.evaluation.dataset import EvalDataset
+
+dataset = EvalDataset.load("tests/eval/eval_dataset.json")
+print(f"Loaded {len(dataset)} pairs")
+print(f"Categories: {dataset.categories()}")
+```
+
+### 4. Run evaluation
+
+```bash
+make eval
+```
+
+### Category Guidelines
+
+| Category | When to Use | Example |
+|----------|------------|---------|
+| `straightforward` | Answer is clearly stated in one document | "What embedding model does the system use?" |
+| `multi_chunk` | Answer requires combining information from 2+ sources | "Compare ReAct and Plan-and-Execute agents" |
+| `unanswerable` | Information is not in the corpus | "What is the stock price of NVIDIA?" |
+| `adversarial` | Question contains a false premise | "Why does BM25 use neural networks?" |
+
+## Interpreting Results
+
+### Score Ranges
+
+| Range | Interpretation | Action |
+|-------|---------------|--------|
+| 0.85 -- 1.0 | Excellent | No action needed |
+| 0.70 -- 0.84 | Good | Monitor for regression |
+| 0.50 -- 0.69 | Fair | Investigate specific failures |
+| 0.00 -- 0.49 | Poor | Root cause analysis needed |
+
+### Common Failure Patterns
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| Low faithfulness | LLM adding information not in context | Tighten system prompt, increase context |
+| Low relevancy | Answer doesn't address the question | Check retrieval quality, adjust k |
+| Low precision | Irrelevant chunks in top results | Improve chunking, tune reranker threshold |
+| Low recall | Needed information not retrieved | Increase k, add query expansion |
+| High variance (std) | Inconsistent quality across questions | Review failing questions individually |
+
 ## Design Decisions
 
 ### Why LLM-as-Judge Instead of RAGAS Library Directly?

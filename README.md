@@ -1,446 +1,239 @@
 # RAG Pipeline Production
 
-A production-grade Retrieval-Augmented Generation system built from scratch in Python. Combines hybrid search (semantic + BM25), cross-encoder reranking, and dual-LLM generation with automatic fallback to deliver accurate, citation-backed answers grounded in your documents.
+[![CI](https://github.com/dennisdarko/rag-pipeline-production/actions/workflows/ci.yml/badge.svg)](https://github.com/dennisdarko/rag-pipeline-production/actions/workflows/ci.yml)
+[![CD](https://github.com/dennisdarko/rag-pipeline-production/actions/workflows/cd.yml/badge.svg)](https://github.com/dennisdarko/rag-pipeline-production/actions/workflows/cd.yml)
+[![Evaluation](https://github.com/dennisdarko/rag-pipeline-production/actions/workflows/eval.yml/badge.svg)](https://github.com/dennisdarko/rag-pipeline-production/actions/workflows/eval.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Tests: 272 passing](https://img.shields.io/badge/tests-272%20passing-brightgreen.svg)]()
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-**272 tests passing | Full CI/CD | Docker-ready | Evaluation framework | Streamlit UI | Structured logging throughout**
+A production-grade Retrieval-Augmented Generation system built from scratch in Python. Combines hybrid search (semantic + BM25), cross-encoder reranking, and dual-LLM generation with automatic fallback to deliver accurate, citation-backed answers grounded in your documents.
 
 ## Architecture
 
 ```
-                            RAG Pipeline Architecture
- ┌─────────────────────────────────────────────────────────────────────────────┐
- │                                                                             │
- │  ┌──────────────────────────────────────────────────────────────────────┐   │
- │  │  Streamlit UI (port 8501)                                           │   │
- │  │  Chat tab ─ Eval tab ─ Sidebar (config, status, ingestion)          │   │
- │  │  Communicates via httpx ──▶ FastAPI backend                          │   │
- │  └──────────────────────────────────────┬───────────────────────────────┘   │
- │                         UI LAYER        │                                   │
- │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │
- │                                          ▼                                  │
- │  ┌──────────┐   ┌────────────┐   ┌───────────┐   ┌──────────────────────┐  │
- │  │  Loader   │──▶│ Preprocessor│──▶│  Chunker  │──▶│  OpenAI Embedder    │  │
- │  │ PDF/MD/   │   │ Clean/Dedup│   │ Recursive │   │  + Embedding Cache   │  │
- │  │ Text/Web  │   │ Fingerprint│   │ Semantic  │   │  (file-based, TTL)   │  │
- │  └──────────┘   └────────────┘   └───────────┘   └──────────┬───────────┘  │
- │                                                              │              │
- │                          INGESTION                           ▼              │
- │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  ┌──────────────────┐   │
- │                                                     │  ChromaDB Vector │   │
- │                                                     │  Store (cosine)  │   │
- │                          STORAGE                    └────────┬─────────┘   │
- │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─          │              │
- │                                                              │              │
- │  ┌─────────┐   ┌────────────────┐   ┌────────────┐         │              │
- │  │  User   │──▶│ Hybrid Retriever│◀──│  BM25      │         │              │
- │  │  Query  │   │ (RRF Fusion)   │◀──│  Retriever │         │              │
- │  └─────────┘   │ w=0.7 / w=0.3 │   └────────────┘         │              │
- │                 │                │◀──┌────────────┐         │              │
- │                 └───────┬────────┘   │  Semantic  │◀────────┘              │
- │                         │            │  Retriever │                        │
- │                         ▼            └────────────┘                        │
- │                 ┌───────────────┐                                           │
- │                 │  Reranker     │   RETRIEVAL                              │
- │                 │  CrossEncoder │                                           │
- │                 │  or LLM-based │                                           │
- │ ─ ─ ─ ─ ─ ─ ─ └───────┬───────┘─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │
- │                         │                                                   │
- │                         ▼                                                   │
- │                 ┌───────────────┐   ┌───────────────┐                      │
- │                 │  RAG Chain    │──▶│ Citation      │                      │
- │                 │  Context +    │   │ Parser &      │                      │
- │                 │  Generation   │   │ Validator     │                      │
- │                 └───────┬───────┘   └───────────────┘                      │
- │                         │                                                   │
- │                         ▼                       GENERATION                  │
- │                 ┌───────────────┐                                           │
- │                 │  FallbackLLM  │                                           │
- │                 │ Claude ──▶ GPT│                                           │
- │                 └───────┬───────┘                                           │
- │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┼ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │
- │                         ▼                                                   │
- │                 ┌───────────────┐                                           │
- │                 │  RAGResponse  │                                           │
- │                 │  answer +     │                                           │
- │                 │  sources +    │                                           │
- │                 │  citations +  │                                           │
- │                 │  metadata     │                                           │
- │                 └───────────────┘                                           │
- └─────────────────────────────────────────────────────────────────────────────┘
+  Streamlit UI (:8501)           FastAPI Backend (:8000)
+ ┌──────────────────┐           ┌─────────────────────────────────────────────┐
+ │  Chat | Eval     │   httpx   │                                             │
+ │  Config | Status │ ────────▶ │  Ingest ──▶ Preprocess ──▶ Chunk ──▶ Embed  │
+ │  Ingest          │           │                                       │     │
+ └──────────────────┘           │                            ChromaDB ◀─┘     │
+                                │                               │             │
+                                │  Query ──▶ Hybrid Retriever ◀─┘             │
+                                │              (Semantic + BM25, RRF)         │
+                                │                    │                        │
+                                │            Cross-Encoder Reranker           │
+                                │                    │                        │
+                                │            RAG Chain ──▶ FallbackLLM        │
+                                │            (Claude ──▶ GPT-4o)              │
+                                │                    │                        │
+                                │            Citation Parser ──▶ RAGResponse  │
+                                └─────────────────────────────────────────────┘
 ```
 
 ## Features
 
-### Document Ingestion
-- **Multi-format loading** -- PDF (PyPDF2), Markdown, plain text, and web pages (httpx + BeautifulSoup)
-- **Smart chunking** -- Recursive character splitting and semantic chunking (cosine similarity grouping)
-- **Preprocessing pipeline** -- Unicode normalization, whitespace cleanup, metadata extraction, SHA-256 deduplication
-- **Factory pattern** -- `get_loader("file.pdf")` auto-detects the right loader
-
-### Embeddings & Storage
-- **OpenAI embeddings** -- text-embedding-3-small with configurable dimensions, automatic token truncation
-- **File-based embedding cache** -- SHA-256 keyed, sharded directories, TTL support, batch-aware (only uncached texts hit the API)
-- **ChromaDB vector store** -- Persistent storage, configurable distance metrics (cosine/L2/IP), metadata filtering, batch upsert
-
-### Hybrid Retrieval
-- **Semantic search** -- Dense vector retrieval through the embedder + vector store
-- **BM25 keyword search** -- Okapi BM25 sparse retrieval with normalized scoring
-- **Reciprocal Rank Fusion** -- Combines both retrievers with configurable weights (default 0.7 semantic / 0.3 keyword)
-- **Query expansion** -- LLM generates alternative phrasings to improve recall
-- **HyDE** -- Hypothetical Document Embedding for better query-document alignment
-
-### Reranking
-- **Cross-encoder reranker** -- ms-marco-MiniLM-L-6-v2 scores each (query, document) pair directly. Lazy model loading.
-- **LLM reranker** -- Claude/GPT scores relevance 1-10 with batch processing. Handles parse failures gracefully.
-
-### RAG Generation
-- **Dual-LLM support** -- Claude 3.5 Sonnet (primary) and GPT-4o (secondary), both with tenacity retry (3 attempts, exponential backoff)
-- **Automatic fallback** -- `FallbackLLM` tries Claude first, switches to GPT-4o on failure, tracks fallback frequency
-- **Citation validation** -- Parses `[Source: filename, chunk N]` citations, strips hallucinated sources
-- **Graceful degradation** -- Each pipeline stage has error handling: retrieval failure, reranker failure, and LLM failure all produce meaningful responses
-- **Token tracking** -- Cumulative input/output token counts across all LLM calls
-
-### Evaluation Framework
-- **LLM-as-judge metrics** -- Faithfulness, answer relevancy, context precision, and context recall (all 0-1 with explanations)
-- **Golden dataset** -- 18 hand-crafted Q&A pairs across 4 categories (straightforward, multi-chunk, unanswerable, adversarial)
-- **Evaluation runner** -- Orchestrates RAG evaluation with per-question and aggregate metrics, latency tracking
-- **Report export** -- JSON for CI/programmatic use, Markdown for human review
-- **Run comparison** -- Detect improvements, regressions, and unchanged metrics between evaluation runs
-- **CI quality gates** -- Weekly scheduled evaluation, fail if faithfulness or relevancy drops below 0.7
-
-### Streamlit Dashboard
-- **Interactive chat UI** -- Ask questions, view answers with expandable source cards and pipeline timing breakdown
-- **Document ingestion** -- Upload PDFs, Markdown, or text files directly from the sidebar, or paste a URL
-- **Evaluation tab** -- Run the golden dataset evaluation, view aggregate metric cards and per-question results table
-- **System status** -- Live API and vector store health indicators in the sidebar
-- **Dark theme** -- Professional dark slate/indigo theme with custom CSS, color-coded metrics (green/yellow/red)
-- **Configuration panel** -- Adjust LLM provider, retrieval k, reranking toggle, and rerank top-k from the sidebar
-
-### Production-Ready
-- **FastAPI** with versioned API (`/api/v1/`), OpenAPI docs, CORS, and global error handling
-- **Rate limiting** -- Sliding-window per-IP rate limiter with standard headers (X-RateLimit-Limit/Remaining)
-- **Request logging** -- Correlation IDs (X-Request-ID), per-request timing, structured JSON logging
-- **Structured logging** via structlog (JSON in production, console in dev)
-- **Prometheus metrics** definitions for monitoring
-- **Docker** multi-stage build + docker-compose (API + ChromaDB + Streamlit UI)
-- **GitHub Actions CI** -- lint, type-check, test on every push/PR + scheduled evaluation workflow
-- **272 passing tests** covering unit, integration, and edge cases
+| Category | Highlights |
+|----------|-----------|
+| **Ingestion** | PDF, Markdown, text, web scraping. Recursive + semantic chunking. SHA-256 dedup. |
+| **Embeddings** | OpenAI text-embedding-3-small with file-based cache (sharded, TTL, batch-aware). |
+| **Retrieval** | Hybrid search (semantic + BM25) fused with Reciprocal Rank Fusion. Query expansion & HyDE. |
+| **Reranking** | Cross-encoder (ms-marco-MiniLM) or LLM-based relevance scoring. Lazy model loading. |
+| **Generation** | Dual-LLM (Claude + GPT-4o) with automatic fallback, citation validation, token tracking. |
+| **Evaluation** | LLM-as-judge (4 metrics), 18-pair golden dataset, JSON/Markdown reports, CI quality gates. |
+| **UI** | Streamlit dashboard with chat, evaluation, document ingestion, and live system status. |
+| **API** | FastAPI with rate limiting, correlation IDs, structured logging, OpenAPI docs. |
+| **DevOps** | Docker multi-stage builds, GitHub Actions CI/CD, 272 tests, pip-audit security scanning. |
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.11+
-- API keys: [Anthropic](https://console.anthropic.com/) and/or [OpenAI](https://platform.openai.com/)
-
-### Install
-
 ```bash
+# 1. Clone and install
 git clone https://github.com/dennisdarko/rag-pipeline-production.git
 cd rag-pipeline-production
-
-# Create virtual environment and install
-python -m venv .venv
-source .venv/bin/activate      # Linux/Mac
-# .venv\Scripts\activate       # Windows
-
 pip install -e ".[dev]"
+
+# 2. Configure
+cp .env.example .env    # Add your ANTHROPIC_API_KEY and OPENAI_API_KEY
+
+# 3. Seed and run
+make seed               # Load sample docs into ChromaDB
+make run                # API at http://localhost:8000
+make run-ui             # UI at http://localhost:8501 (separate terminal)
 ```
 
-### Configure
+### Docker (one command)
 
 ```bash
-cp .env.example .env
+make docker-build && make docker-up
 ```
 
-Edit `.env` with your API keys:
+Starts API (`:8000`), ChromaDB (`:8001`), and Streamlit UI (`:8501`) with health check dependencies and network isolation.
 
-```env
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-```
+## API Reference
 
-### Seed the Database
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/query` | Run the full RAG pipeline (retrieve, rerank, generate) |
+| `POST` | `/api/v1/ingest` | Ingest a document from file path or URL |
+| `POST` | `/api/v1/ingest/upload` | Upload and ingest a file (PDF, MD, TXT) |
+| `POST` | `/api/v1/evaluate` | Evaluate RAG quality against Q&A pairs |
+| `GET`  | `/health` | Component-level health check |
+
+Interactive docs at `http://localhost:8000/docs`.
 
 ```bash
-make seed
-```
-
-This loads the 4 sample technical documents, chunks them, generates embeddings via OpenAI, and stores everything in ChromaDB.
-
-### Run
-
-```bash
-make run
-```
-
-API available at `http://localhost:8000` -- interactive docs at `http://localhost:8000/docs`.
-
-### Launch the UI
-
-```bash
-make run-ui
-```
-
-Streamlit dashboard available at `http://localhost:8501`. Requires the API server to be running.
-
-### Docker
-
-```bash
-make docker-build
-make docker-up
-```
-
-Starts the API server (port 8000), ChromaDB (port 8001), and Streamlit UI (port 8501).
-
-## Usage
-
-### Python API
-
-```python
-from src.embeddings.embedder import OpenAIEmbedder
-from src.generation.chain import RAGChain
-from src.generation.llm import LLMFactory
-from src.retrieval.reranker import CrossEncoderReranker
-from src.retrieval.retriever import HybridRetriever, SemanticRetriever, BM25Retriever
-from src.vectorstore.chroma_store import ChromaVectorStore
-
-# Set up components
-embedder = OpenAIEmbedder()
-store = ChromaVectorStore(collection_name="rag_documents")
-semantic = SemanticRetriever(embedder=embedder, vector_store=store)
-bm25 = BM25Retriever(documents=your_documents)
-retriever = HybridRetriever(semantic=semantic, bm25=bm25)
-reranker = CrossEncoderReranker()
-llm = LLMFactory.create("fallback")
-
-# Build the chain
-chain = RAGChain(retriever=retriever, llm=llm, reranker=reranker)
-
-# Query
-response = chain.query("How do transformer attention mechanisms work?")
-
-print(response.answer)
-# "Transformer attention mechanisms use scaled dot-product attention..."
-
-print(response.sources)
-# [Source(source_name='transformer_architecture.md', chunk_index=2, ...)]
-
-print(response.metadata)
-# {'latency_ms': 1234.5, 'num_retrieved': 10, 'tokens_used': {...}, ...}
-```
-
-### REST API
-
-```bash
-# Query (full RAG pipeline)
+# Example: query the pipeline
 curl -X POST http://localhost:8000/api/v1/query \
   -H "Content-Type: application/json" \
   -d '{"question": "What is retrieval-augmented generation?", "k": 10, "rerank": true}'
-
-# Ingest a document
-curl -X POST http://localhost:8000/api/v1/ingest \
-  -H "Content-Type: application/json" \
-  -d '{"source_path": "./data/sample_docs/rag_systems.md"}'
-
-# Upload a file directly
-curl -X POST http://localhost:8000/api/v1/ingest/upload \
-  -F "file=@./my_document.pdf"
-
-# Evaluate RAG quality
-curl -X POST http://localhost:8000/api/v1/evaluate \
-  -H "Content-Type: application/json" \
-  -d '{"qa_pairs": [{"question": "What is RAG?", "ground_truth": "RAG is..."}]}'
-
-# Health check (component-level)
-curl http://localhost:8000/health
 ```
 
-## Project Structure
+## Streamlit Dashboard
 
+The UI communicates with the backend exclusively via HTTP (no internal imports) and provides:
+
+- **Chat tab** -- Conversational interface with expandable source cards and pipeline timing
+- **Evaluation tab** -- Run golden dataset evaluation, view color-coded metric cards and per-question results
+- **Sidebar** -- LLM provider selection, retrieval/reranking controls, system health, document ingestion
+- **Dark theme** -- Professional slate/indigo palette with responsive layout
+
+## Evaluation
+
+Four LLM-as-judge metrics, each scored 0.0 -- 1.0 with explanations:
+
+| Metric | What It Measures | CI Threshold |
+|--------|-----------------|-------------|
+| **Faithfulness** | Are claims supported by retrieved context? | >= 0.70 |
+| **Answer Relevancy** | Does the answer address the question? | >= 0.70 |
+| **Context Precision** | Are retrieved contexts relevant? | Monitored |
+| **Context Recall** | Is needed information present in context? | Monitored |
+
+Golden dataset: 18 Q&A pairs across 4 categories (straightforward, multi-chunk, unanswerable, adversarial). Weekly automated evaluation with GitHub issue creation on quality degradation.
+
+```bash
+make eval    # Run evaluation locally
 ```
-rag-pipeline-production/
-├── src/
-│   ├── api/                    # FastAPI application
-│   │   ├── main.py             #   App entry point, CORS, lifecycle, routes
-│   │   ├── schemas.py          #   Pydantic request/response schemas
-│   │   ├── routes/
-│   │   │   ├── query.py        #   POST /api/v1/query (RAG pipeline)
-│   │   │   ├── ingest.py       #   POST /api/v1/ingest + /ingest/upload
-│   │   │   ├── evaluate.py     #   POST /api/v1/evaluate (Q&A testing)
-│   │   │   └── health.py       #   GET /health (component checks)
-│   │   └── middleware/
-│   │       ├── rate_limit.py   #   Sliding-window per-IP rate limiter
-│   │       └── logging.py      #   Request logging with correlation IDs
-│   ├── config/
-│   │   └── settings.py         # Pydantic Settings (all config from .env)
-│   ├── ingestion/
-│   │   ├── loader.py           # PDF, Markdown, Text, Web loaders
-│   │   ├── chunker.py          # Recursive + Semantic chunking
-│   │   └── preprocessor.py     # Clean, extract metadata, dedup
-│   ├── embeddings/
-│   │   ├── embedder.py         # BaseEmbedder + OpenAIEmbedder
-│   │   └── cache.py            # File-based embedding cache + CachedEmbedder
-│   ├── vectorstore/
-│   │   ├── base.py             # VectorStore ABC + SearchResult
-│   │   └── chroma_store.py     # ChromaDB implementation
-│   ├── retrieval/
-│   │   ├── retriever.py        # Semantic, BM25, Hybrid (RRF) retrievers
-│   │   ├── query_transform.py  # QueryExpander, HyDE, MultiQueryRetriever
-│   │   └── reranker.py         # CrossEncoder + LLM rerankers
-│   ├── generation/
-│   │   ├── llm.py              # Claude, OpenAI, Fallback LLM + Factory
-│   │   ├── prompts.py          # RAG prompt templates + formatters
-│   │   ├── chain.py            # RAGChain orchestrator + RAGResponse
-│   │   └── response_parser.py  # Citation parsing + validation
-│   ├── evaluation/
-│   │   ├── metrics.py          # RAGMetrics (LLM-as-judge, 4 metrics)
-│   │   ├── dataset.py          # EvalDataset, QAPair, load/save JSON
-│   │   └── runner.py           # EvalRunner, EvalReport, comparison
-│   ├── models/
-│   │   └── document.py         # Universal Document model (Pydantic)
-│   └── utils/
-│       ├── logger.py           # Structlog configuration
-│       └── monitoring.py       # Prometheus metrics
-├── tests/
-│   ├── unit/                   # 256 unit tests
-│   │   ├── test_loader.py      #   Document loaders (13 tests)
-│   │   ├── test_chunker.py     #   Chunking strategies (21 tests)
-│   │   ├── test_embedder.py    #   OpenAI embedder (10 tests)
-│   │   ├── test_cache.py       #   Embedding cache (17 tests)
-│   │   ├── test_retriever.py   #   Retrieval strategies (20 tests)
-│   │   ├── test_reranker.py    #   Reranking (18 tests)
-│   │   ├── test_llm.py         #   LLM abstraction (27 tests)
-│   │   ├── test_prompts.py     #   Prompt templates (17 tests)
-│   │   ├── test_chain.py       #   RAG chain (14 tests)
-│   │   ├── test_settings.py    #   Configuration (2 tests)
-│   │   ├── test_api_query.py   #   Query endpoint (11 tests)
-│   │   ├── test_api_ingest.py  #   Ingest endpoints (11 tests)
-│   │   ├── test_api_evaluate.py #  Evaluate endpoint (8 tests)
-│   │   ├── test_api_health.py  #   Health endpoint (4 tests)
-│   │   ├── test_metrics.py     #   Evaluation metrics (28 tests)
-│   │   ├── test_eval_dataset.py #  Evaluation dataset (13 tests)
-│   │   └── test_eval_runner.py #   Evaluation runner (20 tests)
-│   ├── eval/
-│   │   └── eval_dataset.json   # Golden dataset (18 Q&A pairs)
-│   └── integration/            # 16 integration tests
-│       ├── test_ingestion_pipeline.py  # Ingestion pipeline (4 tests)
-│       └── test_api.py         #   API integration (12 tests)
-├── ui/
-│   ├── app.py                  # Streamlit dashboard (chat + eval tabs)
-│   ├── api_client.py           # httpx client for FastAPI backend
-│   ├── components.py           # MetricCard, SourceCard, PipelineTimeline
-│   └── config.py               # Page config, API URL, theme colors
-├── data/
-│   └── sample_docs/            # 4 technical articles (AI agents, MLOps, etc.)
-├── scripts/
-│   ├── setup.sh                # Environment setup
-│   ├── seed_db.sh              # Load → chunk → embed → store pipeline
-│   └── run_eval.sh             # Configurable evaluation runner
-├── docker/
-│   ├── Dockerfile              # Multi-stage production build
-│   └── docker-compose.yml      # API + ChromaDB + Streamlit UI
-├── docs/
-│   ├── ARCHITECTURE.md         # System design and data flow
-│   ├── DEPLOYMENT.md           # Deployment guide
-│   ├── EVALUATION.md           # Evaluation methodology
-│   └── HANDOFF.md              # Development handoff document
-├── .github/workflows/
-│   ├── ci.yml                  # GitHub Actions (lint, type-check, test)
-│   └── eval.yml                # Scheduled evaluation with quality gates
-├── pyproject.toml              # Dependencies, build config, tool settings
-├── Makefile                    # Development commands
-└── .env.example                # Environment variable template
-```
+
+See [docs/EVALUATION.md](docs/EVALUATION.md) for full methodology.
 
 ## Tech Stack
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
 | **API** | FastAPI + Uvicorn | Async HTTP server with OpenAPI docs |
-| **Vector DB** | ChromaDB | Persistent vector storage with metadata filtering |
-| **Embeddings** | OpenAI text-embedding-3-small | 1536-dim dense vectors, tiktoken token counting |
-| **LLM (Primary)** | Claude 3.5 Sonnet | High-quality generation with citation support |
-| **LLM (Fallback)** | GPT-4o | Automatic fallback on Claude failures |
+| **Vector DB** | ChromaDB | Persistent vector storage with HNSW indexing |
+| **Embeddings** | OpenAI text-embedding-3-small | 1536-dim dense vectors with tiktoken counting |
+| **LLM** | Claude 3.5 Sonnet + GPT-4o | Dual-LLM with automatic fallback |
 | **Sparse Retrieval** | rank-bm25 | Okapi BM25 keyword matching |
 | **Reranking** | sentence-transformers | Cross-encoder ms-marco-MiniLM-L-6-v2 |
 | **Chunking** | LangChain text splitters | Recursive character + semantic chunking |
-| **Config** | Pydantic Settings | Type-safe configuration from .env |
+| **UI** | Streamlit | Interactive dashboard with dark theme |
+| **Config** | Pydantic Settings | Type-safe configuration from `.env` |
 | **Logging** | structlog | Structured JSON logging with context |
-| **Retry** | tenacity | Exponential backoff for API calls |
-| **Evaluation** | Custom LLM-as-judge | 4 metrics: faithfulness, relevancy, precision, recall |
-| **Testing** | pytest + pytest-asyncio | 272 tests, async support, coverage |
+| **Testing** | pytest | 272 tests, 80%+ coverage required |
 | **Linting** | ruff + mypy | Fast linting + strict type checking |
-| **CI/CD** | GitHub Actions | Lint, type-check, test on push/PR |
-| **Containers** | Docker + Compose | Multi-stage build, 3-service stack |
-| **UI** | Streamlit | Interactive query dashboard |
+| **CI/CD** | GitHub Actions | Lint, test, security scan, Docker push |
+| **Containers** | Docker + Compose | Multi-stage builds, 3-service stack |
+
+## Project Structure
+
+```
+rag-pipeline-production/
+├── src/
+│   ├── api/                        # FastAPI application
+│   │   ├── main.py                 #   App entry point, CORS, lifecycle
+│   │   ├── schemas.py              #   Pydantic request/response models
+│   │   ├── routes/                 #   query, ingest, evaluate, health
+│   │   └── middleware/             #   Rate limiting, request logging
+│   ├── ingestion/                  # Document loading, chunking, preprocessing
+│   ├── embeddings/                 # OpenAI embedder + file-based cache
+│   ├── vectorstore/                # ChromaDB implementation + ABC
+│   ├── retrieval/                  # Semantic, BM25, Hybrid retrievers + rerankers
+│   ├── generation/                 # LLM abstraction, RAG chain, citation parser
+│   ├── evaluation/                 # Metrics, dataset, runner, report comparison
+│   ├── config/                     # Pydantic Settings
+│   ├── models/                     # Universal Document model
+│   └── utils/                      # Structured logging, Prometheus metrics
+├── tests/
+│   ├── unit/                       # 256 unit tests (all APIs mocked)
+│   ├── integration/                # 16 integration tests
+│   └── eval/                       # Golden dataset (18 Q&A pairs)
+├── ui/                             # Streamlit dashboard
+│   ├── app.py                      #   Main app (chat + eval tabs)
+│   ├── api_client.py               #   httpx client for backend
+│   ├── components.py               #   Metric cards, source cards, timeline
+│   └── config.py                   #   Theme, API URL, page settings
+├── docker/
+│   ├── Dockerfile                  # Multi-stage API build (non-root user)
+│   ├── Dockerfile.ui               # Lightweight UI build
+│   └── docker-compose.yml          # 3-service stack with network isolation
+├── .github/workflows/
+│   ├── ci.yml                      # Lint, type-check, test, security scan
+│   ├── cd.yml                      # Docker build + push to ghcr.io
+│   └── eval.yml                    # Scheduled evaluation + quality gates
+├── docs/                           # Architecture, deployment, evaluation, handoff
+├── scripts/                        # setup.sh, seed_db.sh, run_eval.sh
+├── data/sample_docs/               # 4 technical articles for testing
+├── pyproject.toml                  # Dependencies and tool configuration
+├── Makefile                        # All development commands
+├── .dockerignore                   # Docker build exclusions
+├── CONTRIBUTING.md                 # Contributing guidelines
+└── LICENSE                         # MIT
+```
 
 ## Testing
 
 ```bash
-# Run all 272 tests
-make test
-
-# Run with coverage report
-make test-cov
-
-# Run specific test file
-pytest tests/unit/test_chain.py -v
-
-# Run only integration tests
-pytest tests/integration/ -v
-
-# Run only API tests
-pytest tests/unit/test_api_*.py tests/integration/test_api.py -v
-
-# Run only evaluation tests
-pytest tests/unit/test_metrics.py tests/unit/test_eval_runner.py tests/unit/test_eval_dataset.py -v
-
-# Run RAG evaluation against golden dataset
-make eval
+make test           # Run all 272 tests
+make test-cov       # Run with HTML coverage report (80%+ required)
+make eval           # Run RAG evaluation against golden dataset
 ```
 
-**Test breakdown:**
-- Unit tests: 256 (loaders, chunkers, embedder, cache, retrievers, rerankers, LLM, prompts, chain, API endpoints, evaluation metrics/dataset/runner)
-- Integration tests: 16 (ingestion pipeline + full API request/response cycle)
+All external APIs (OpenAI, Anthropic, ChromaDB) are mocked -- no API keys needed for the test suite.
 
-All external APIs (OpenAI, Anthropic, ChromaDB) are mocked in tests -- no API keys required to run the test suite.
+**Breakdown:** 256 unit tests + 16 integration tests covering loaders, chunkers, embedder, cache, retrievers, rerankers, LLM, prompts, chain, API endpoints, evaluation metrics/dataset/runner, and full API request/response cycles.
 
 ## CI/CD
 
-GitHub Actions runs on every push and PR to `main`:
-
-1. **Lint** -- `ruff check` for code quality
-2. **Format** -- `ruff format --check` for consistent style
-3. **Type check** -- `mypy` with strict settings
-4. **Test** -- `pytest` with coverage upload to Codecov
+| Workflow | Trigger | Jobs |
+|----------|---------|------|
+| **CI** | Push/PR to `main` | Lint, type-check, test (Python 3.11 + 3.12), security scan |
+| **CD** | Push to `main` | Build + push Docker images to `ghcr.io` |
+| **Eval** | Weekly + manual | RAG quality evaluation with threshold checks, auto-creates issues on degradation |
 
 ## Configuration
 
-All settings are managed through environment variables (`.env` file), loaded via Pydantic Settings:
+All settings via environment variables (`.env`), loaded through Pydantic Settings:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | | Anthropic API key for Claude |
-| `OPENAI_API_KEY` | | OpenAI API key for embeddings + GPT-4o |
-| `LLM_MODEL` | `claude-3-5-sonnet-20241022` | Primary LLM model |
-| `LLM_FALLBACK_MODEL` | `gpt-4o` | Fallback LLM model |
-| `LLM_TEMPERATURE` | `0.0` | Generation temperature |
-| `LLM_MAX_TOKENS` | `2048` | Max output tokens |
+| `ANTHROPIC_API_KEY` | | Claude API key |
+| `OPENAI_API_KEY` | | OpenAI API key (embeddings + GPT-4o fallback) |
+| `LLM_MODEL` | `claude-3-5-sonnet-20241022` | Primary LLM |
+| `LLM_FALLBACK_MODEL` | `gpt-4o` | Fallback LLM |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model |
-| `EMBEDDING_DIMENSION` | `1536` | Embedding vector dimensions |
 | `CHUNK_SIZE` | `512` | Characters per chunk |
-| `CHUNK_OVERLAP` | `50` | Overlap between chunks |
-| `CHROMA_PERSIST_DIR` | `./data/chroma` | ChromaDB storage path |
 | `RETRIEVAL_TOP_K` | `10` | Documents to retrieve |
 | `RERANK_TOP_K` | `5` | Documents after reranking |
-| `API_HOST` | `0.0.0.0` | API server bind address |
-| `API_PORT` | `8000` | API server port |
-| `RATE_LIMIT_REQUESTS` | `60` | Max requests per rate limit window |
-| `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
-| `CORS_ORIGINS` | `*` | Comma-separated CORS origins |
+| `CHROMA_PERSIST_DIR` | `./data/chroma` | ChromaDB storage path |
+| `RATE_LIMIT_REQUESTS` | `60` | Requests per rate-limit window |
 | `LOG_LEVEL` | `INFO` | Logging level |
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the complete reference.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md) -- System design, data flow diagrams, design decisions
+- [Deployment](docs/DEPLOYMENT.md) -- Local setup, Docker, environment variables, cloud guide
+- [Evaluation](docs/EVALUATION.md) -- Metrics, golden dataset, CI integration, Python API
+- [Handoff](docs/HANDOFF.md) -- Complete project status, file inventory, architecture decisions
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 ## License
 
-MIT
+[MIT](LICENSE)

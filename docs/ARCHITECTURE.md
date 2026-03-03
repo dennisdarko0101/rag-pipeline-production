@@ -332,3 +332,87 @@ Streamlit was chosen for the demo dashboard because:
 - **Docker-friendly** -- lightweight container, easy to add to the existing compose stack
 
 The UI communicates with the backend **exclusively via httpx HTTP calls** (through `ui/api_client.py`), never importing internal Python modules. This enforces a clean boundary: the UI is a consumer of the REST API, just like any external client. This means the UI can be replaced with a React/Next.js frontend without touching the backend.
+
+## Performance Considerations
+
+### Latency Budget (typical query)
+
+| Stage | Typical | Notes |
+|-------|---------|-------|
+| Embedding query | 50-100 ms | Single API call to OpenAI |
+| ChromaDB search | 5-20 ms | HNSW approximate nearest neighbor |
+| BM25 search | 1-5 ms | In-memory, no network call |
+| RRF fusion | < 1 ms | Simple rank-based arithmetic |
+| Cross-encoder reranking | 100-300 ms | CPU inference, 5-10 documents |
+| LLM generation | 1-3 s | Dominant cost, depends on provider |
+| Citation parsing | < 1 ms | Regex, pure Python |
+| **Total** | **1.5-3.5 s** | **Reranking optional, LLM is bottleneck** |
+
+### Optimization Strategies Used
+
+- **Embedding cache** -- SHA-256 keyed file cache eliminates redundant API calls for previously-seen texts
+- **Batch embedding** -- Groups of 100 texts per API call, only uncached texts hit the network
+- **Lazy model loading** -- Cross-encoder loaded on first rerank call, not at startup
+- **Context truncation** -- Caps context at 12,000 chars to control LLM input token cost
+- **Hybrid fetch overshoot** -- Retrieves k*3 candidates from each retriever to improve fusion quality
+- **Connection reuse** -- httpx clients reuse connections within the Streamlit session
+
+### Memory Profile
+
+| Component | Approximate Memory |
+|-----------|-------------------|
+| FastAPI app (idle) | ~150 MB |
+| Cross-encoder model (loaded) | ~100 MB |
+| ChromaDB (embedded, 1K docs) | ~200 MB |
+| Streamlit UI | ~80 MB |
+
+## Scaling Strategy
+
+### Current Design (Single-Server)
+
+The current architecture runs all components on a single server (or via Docker Compose). This is appropriate for demos, development, and moderate traffic (< 50 concurrent users).
+
+### Horizontal Scaling Path
+
+```
+                    Load Balancer
+                    ┌─────────┐
+                    │  nginx  │
+                    └────┬────┘
+                         │
+              ┌──────────┼──────────┐
+              ▼          ▼          ▼
+         ┌─────────┐ ┌─────────┐ ┌─────────┐
+         │ API (1) │ │ API (2) │ │ API (3) │    Stateless — scale horizontally
+         └────┬────┘ └────┬────┘ └────┬────┘
+              │          │          │
+              └──────────┼──────────┘
+                         ▼
+                  ┌─────────────┐
+                  │  ChromaDB   │    Single writer, or switch to
+                  │  (managed)  │    Pinecone/Qdrant for managed scaling
+                  └─────────────┘
+```
+
+**Key scaling decisions:**
+
+1. **API servers are stateless** -- no in-memory state beyond the rate limiter (which would need Redis in a multi-instance setup)
+2. **Vector store is the bottleneck** -- ChromaDB is single-process; for > 100K documents, swap to a managed vector DB (Pinecone, Qdrant Cloud, Weaviate)
+3. **Embedding cache** -- Move from file-based to Redis for shared caching across API instances
+4. **Rate limiter** -- Move from in-memory dict to Redis sliding window for distributed rate limiting
+5. **BM25 index** -- Currently rebuilt per-request; for production, maintain a persistent index (e.g., Elasticsearch)
+
+### Production Readiness Checklist
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Multi-stage Docker build | Done | Non-root user, optimized layers |
+| Health checks | Done | API + ChromaDB + Streamlit |
+| Structured logging | Done | JSON format with correlation IDs |
+| Rate limiting | Done | Per-IP sliding window |
+| Retry logic | Done | Tenacity on all LLM calls |
+| Graceful degradation | Done | Every pipeline stage handles failure |
+| CI/CD pipeline | Done | Lint, test, security scan, Docker push |
+| Evaluation framework | Done | Automated quality monitoring |
+| Network isolation | Done | Backend network is internal-only |
+| Resource limits | Done | CPU/memory limits in docker-compose |

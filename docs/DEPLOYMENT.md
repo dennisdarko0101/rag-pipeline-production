@@ -131,16 +131,18 @@ docker compose -f docker/docker-compose.yml logs -f api
 
 ### Docker Configuration
 
-The `docker/Dockerfile` uses a multi-stage build:
-1. **Base stage** -- installs dependencies with pip
-2. **Production stage** -- copies only site-packages and source code, no build tools
+Two Dockerfiles are used:
+
+- `docker/Dockerfile` -- API server (multi-stage: builder installs deps, production stage has non-root user, health check, labels)
+- `docker/Dockerfile.ui` -- Streamlit UI (lighter image, only installs streamlit + httpx, no ML dependencies)
 
 The `docker/docker-compose.yml` defines:
-- Shared `chroma_data` volume for ChromaDB persistence
-- `.env` file mounted for API keys
-- API health check (httpx GET /health) used for service dependency ordering
-- UI service waits for API to be healthy before starting (`depends_on: condition: service_healthy`)
-- UI service sets `API_BASE_URL=http://api:8000` for Docker networking
+- **Network isolation** -- `backend` (internal, api <-> chromadb only) and `frontend` (externally accessible, ui <-> api)
+- **Resource limits** -- CPU/memory limits and reservations per service
+- **Health checks** -- API (httpx GET /health), ChromaDB (heartbeat), Streamlit (health endpoint)
+- **Dependency ordering** -- UI waits for API healthy, API waits for ChromaDB started
+- **Persistent volumes** -- `chroma_data` for vector store, `eval_results` for evaluation reports
+- **Non-root user** -- Both Dockerfiles run as `appuser` (UID 1000)
 
 ### Custom Docker Build
 
@@ -150,6 +152,9 @@ docker build -f docker/Dockerfile -t rag-pipeline:custom .
 
 # Run just the API container
 docker run -p 8000:8000 --env-file .env rag-pipeline:custom
+
+# Build just the UI
+docker build -f docker/Dockerfile.ui -t rag-pipeline-ui:custom .
 ```
 
 ## Environment Variables Reference
@@ -264,13 +269,133 @@ store.add_documents(chunks, embeddings)
 
 ## CI/CD
 
-GitHub Actions runs on every push and PR to `main`:
+Three GitHub Actions workflows:
+
+### CI (`.github/workflows/ci.yml`)
+
+Runs on every push and PR to `main`:
 
 | Job | Tool | What it checks |
 |-----|------|---------------|
-| Lint | `ruff check` | Code quality and style rules |
-| Format | `ruff format --check` | Consistent code formatting |
-| Type check | `mypy` | Static type analysis (strict mode) |
-| Test | `pytest --cov` | All 272 tests + coverage upload to Codecov |
+| Lint & Format | `ruff check` + `ruff format --check` | Code quality and style |
+| Type Check | `mypy` | Static type analysis (strict mode) |
+| Test | `pytest --cov --cov-fail-under=80` | 272 tests, Python 3.11 + 3.12, 80%+ coverage required |
+| Security | `pip-audit` | Vulnerability scanning of dependencies |
 
-Configuration: `.github/workflows/ci.yml`
+### CD (`.github/workflows/cd.yml`)
+
+Runs on push to `main` (after CI passes):
+
+| Job | What it does |
+|-----|-------------|
+| Build & Push | Builds Docker images and pushes to `ghcr.io` |
+| Tagging | Tags with git SHA and `latest` |
+| Caching | Uses GitHub Actions cache for faster builds |
+
+Images are pushed to:
+- `ghcr.io/<owner>/rag-pipeline:latest` (API)
+- `ghcr.io/<owner>/rag-pipeline-ui:latest` (UI)
+
+### Evaluation (`.github/workflows/eval.yml`)
+
+Runs weekly (Sunday midnight UTC) and on manual trigger:
+
+| Feature | Description |
+|---------|-------------|
+| Quality gates | Fails if faithfulness or relevancy < 0.70 |
+| Job summary | Posts Markdown results table to the workflow summary |
+| Auto-issue | Creates a GitHub issue on quality degradation |
+| Artifacts | Uploads JSON/Markdown reports (90-day retention) |
+
+## Cloud Deployment
+
+### AWS (EC2 + Docker Compose)
+
+For a straightforward cloud deployment:
+
+```bash
+# 1. Launch an EC2 instance (t3.medium or larger)
+#    - Amazon Linux 2 or Ubuntu 22.04
+#    - Security group: open ports 8000, 8501
+
+# 2. Install Docker
+sudo yum install -y docker docker-compose-plugin   # Amazon Linux
+sudo systemctl start docker
+
+# 3. Clone and configure
+git clone https://github.com/dennisdarko/rag-pipeline-production.git
+cd rag-pipeline-production
+cp .env.example .env
+# Edit .env with your API keys
+
+# 4. Build and start
+make docker-build
+make docker-up
+
+# 5. Verify
+curl http://localhost:8000/health
+```
+
+### AWS (ECS Fargate)
+
+For production-grade managed deployment:
+
+1. Push Docker images to ECR (or use ghcr.io images from CD pipeline)
+2. Create ECS task definition with 3 containers (api, chromadb, ui)
+3. Configure ALB target groups for port 8000 and 8501
+4. Store API keys in AWS Secrets Manager, reference in task definition
+5. Use EFS for ChromaDB persistence
+
+### Key Considerations
+
+| Concern | Recommendation |
+|---------|---------------|
+| **Secrets** | Use AWS Secrets Manager or SSM Parameter Store, never bake keys into images |
+| **Persistence** | Mount EBS/EFS for ChromaDB data directory |
+| **Scaling** | API is stateless; scale behind a load balancer. ChromaDB is single-writer. |
+| **Monitoring** | Prometheus metrics are defined; connect to CloudWatch or Grafana |
+| **HTTPS** | Terminate TLS at the load balancer (ALB/nginx) |
+| **Domain** | Route 53 for DNS, ACM for SSL certificates |
+
+## Monitoring and Logging
+
+### Structured Logging
+
+All logs are JSON-formatted via structlog:
+
+```json
+{"event": "request_complete", "method": "POST", "path": "/api/v1/query",
+ "status_code": 200, "duration_ms": 2345.6, "request_id": "abc-123",
+ "timestamp": "2024-01-15T10:30:00Z"}
+```
+
+Key fields:
+- `request_id` -- Correlation ID (X-Request-ID header) for tracing requests across services
+- `duration_ms` -- Per-request latency
+- `event` -- Structured event type for filtering
+
+### Health Checks
+
+The `/health` endpoint returns component-level status:
+
+```json
+{
+  "status": "healthy",
+  "version": "0.1.0",
+  "components": {
+    "vectorstore": {
+      "status": "healthy",
+      "details": "Collection 'rag_documents': 156 documents"
+    }
+  }
+}
+```
+
+Use this for load balancer health checks, uptime monitoring, and alerting.
+
+### Prometheus Metrics
+
+Metric definitions are in `src/utils/monitoring.py`. Connect your Prometheus scraper to the API server to collect:
+- Request counts and latencies by endpoint
+- LLM token usage
+- Retrieval performance
