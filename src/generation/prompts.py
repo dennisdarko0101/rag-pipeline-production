@@ -58,10 +58,7 @@ def format_context(results: list[SearchResult], max_chars: int = MAX_CONTEXT_CHA
         source = result.document.metadata.get("source", "unknown")
         chunk_idx = result.document.metadata.get("chunk_index", i)
 
-        section = (
-            f"[{i + 1}] Source: {source}, Chunk {chunk_idx}\n"
-            f"{result.document.content}"
-        )
+        section = f"[{i + 1}] Source: {source}, Chunk {chunk_idx}\n{result.document.content}"
 
         if total_len + len(section) > max_chars:
             # Truncate this section to fit within the limit

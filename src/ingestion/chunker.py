@@ -148,8 +148,12 @@ class SemanticChunker(BaseChunker):
                 chunks.append(
                     Document(
                         content=sentences[0],
-                        metadata={**doc.metadata, "chunk_index": 0, "total_chunks": 1,
-                                  "parent_doc_id": doc.doc_id},
+                        metadata={
+                            **doc.metadata,
+                            "chunk_index": 0,
+                            "total_chunks": 1,
+                            "parent_doc_id": doc.doc_id,
+                        },
                     )
                 )
                 continue

@@ -2,7 +2,7 @@
 
 A production-grade Retrieval-Augmented Generation system built from scratch in Python. Combines hybrid search (semantic + BM25), cross-encoder reranking, and dual-LLM generation with automatic fallback to deliver accurate, citation-backed answers grounded in your documents.
 
-**166 tests passing | Full CI/CD | Docker-ready | Structured logging throughout**
+**211 tests passing | Full CI/CD | Docker-ready | Structured logging throughout**
 
 ## Architecture
 
@@ -93,12 +93,14 @@ A production-grade Retrieval-Augmented Generation system built from scratch in P
 - **Token tracking** -- Cumulative input/output token counts across all LLM calls
 
 ### Production-Ready
-- **FastAPI** with Pydantic schemas, health checks, and OpenAPI docs
+- **FastAPI** with versioned API (`/api/v1/`), OpenAPI docs, CORS, and global error handling
+- **Rate limiting** -- Sliding-window per-IP rate limiter with standard headers (X-RateLimit-Limit/Remaining)
+- **Request logging** -- Correlation IDs (X-Request-ID), per-request timing, structured JSON logging
 - **Structured logging** via structlog (JSON in production, console in dev)
 - **Prometheus metrics** definitions for monitoring
 - **Docker** multi-stage build + docker-compose (API + ChromaDB + Streamlit UI)
 - **GitHub Actions CI** -- lint, type-check, test on every push/PR
-- **166 passing tests** covering unit, integration, and edge cases
+- **211 passing tests** covering unit, integration, and edge cases
 
 ## Quick Start
 
@@ -199,17 +201,26 @@ print(response.metadata)
 ### REST API
 
 ```bash
-# Query
-curl -X POST http://localhost:8000/query \
+# Query (full RAG pipeline)
+curl -X POST http://localhost:8000/api/v1/query \
   -H "Content-Type: application/json" \
-  -d '{"question": "What is retrieval-augmented generation?", "top_k": 5}'
+  -d '{"question": "What is retrieval-augmented generation?", "k": 10, "rerank": true}'
 
-# Ingest new documents
-curl -X POST http://localhost:8000/ingest \
+# Ingest a document
+curl -X POST http://localhost:8000/api/v1/ingest \
   -H "Content-Type: application/json" \
-  -d '{"source_path": "./data/my_docs/", "doc_type": "markdown"}'
+  -d '{"source_path": "./data/sample_docs/rag_systems.md"}'
 
-# Health check
+# Upload a file directly
+curl -X POST http://localhost:8000/api/v1/ingest/upload \
+  -F "file=@./my_document.pdf"
+
+# Evaluate RAG quality
+curl -X POST http://localhost:8000/api/v1/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"qa_pairs": [{"question": "What is RAG?", "ground_truth": "RAG is..."}]}'
+
+# Health check (component-level)
 curl http://localhost:8000/health
 ```
 
@@ -219,10 +230,16 @@ curl http://localhost:8000/health
 rag-pipeline-production/
 ├── src/
 │   ├── api/                    # FastAPI application
-│   │   ├── main.py             #   App entry point, /health endpoint
-│   │   ├── schemas.py          #   Pydantic request/response models
-│   │   ├── routes/             #   API route modules
-│   │   └── middleware/         #   Rate limiting, auth
+│   │   ├── main.py             #   App entry point, CORS, lifecycle, routes
+│   │   ├── schemas.py          #   Pydantic request/response schemas
+│   │   ├── routes/
+│   │   │   ├── query.py        #   POST /api/v1/query (RAG pipeline)
+│   │   │   ├── ingest.py       #   POST /api/v1/ingest + /ingest/upload
+│   │   │   ├── evaluate.py     #   POST /api/v1/evaluate (Q&A testing)
+│   │   │   └── health.py       #   GET /health (component checks)
+│   │   └── middleware/
+│   │       ├── rate_limit.py   #   Sliding-window per-IP rate limiter
+│   │       └── logging.py      #   Request logging with correlation IDs
 │   ├── config/
 │   │   └── settings.py         # Pydantic Settings (all config from .env)
 │   ├── ingestion/
@@ -250,7 +267,7 @@ rag-pipeline-production/
 │       ├── logger.py           # Structlog configuration
 │       └── monitoring.py       # Prometheus metrics
 ├── tests/
-│   ├── unit/                   # 162 unit tests
+│   ├── unit/                   # 195 unit tests
 │   │   ├── test_loader.py      #   Document loaders (13 tests)
 │   │   ├── test_chunker.py     #   Chunking strategies (21 tests)
 │   │   ├── test_embedder.py    #   OpenAI embedder (10 tests)
@@ -261,9 +278,13 @@ rag-pipeline-production/
 │   │   ├── test_prompts.py     #   Prompt templates (17 tests)
 │   │   ├── test_chain.py       #   RAG chain (14 tests)
 │   │   ├── test_settings.py    #   Configuration (2 tests)
-│   │   └── test_api_health.py  #   Health endpoint (1 test)
-│   └── integration/            # 4 integration tests
-│       └── test_ingestion_pipeline.py
+│   │   ├── test_api_query.py   #   Query endpoint (11 tests)
+│   │   ├── test_api_ingest.py  #   Ingest endpoints (11 tests)
+│   │   ├── test_api_evaluate.py #  Evaluate endpoint (8 tests)
+│   │   └── test_api_health.py  #   Health endpoint (4 tests)
+│   └── integration/            # 16 integration tests
+│       ├── test_ingestion_pipeline.py  # Ingestion pipeline (4 tests)
+│       └── test_api.py         #   API integration (12 tests)
 ├── data/
 │   └── sample_docs/            # 4 technical articles (AI agents, MLOps, etc.)
 ├── scripts/
@@ -298,7 +319,7 @@ rag-pipeline-production/
 | **Config** | Pydantic Settings | Type-safe configuration from .env |
 | **Logging** | structlog | Structured JSON logging with context |
 | **Retry** | tenacity | Exponential backoff for API calls |
-| **Testing** | pytest + pytest-asyncio | 166 tests, async support, coverage |
+| **Testing** | pytest + pytest-asyncio | 211 tests, async support, coverage |
 | **Linting** | ruff + mypy | Fast linting + strict type checking |
 | **CI/CD** | GitHub Actions | Lint, type-check, test on push/PR |
 | **Containers** | Docker + Compose | Multi-stage build, 3-service stack |
@@ -307,7 +328,7 @@ rag-pipeline-production/
 ## Testing
 
 ```bash
-# Run all 166 tests
+# Run all 211 tests
 make test
 
 # Run with coverage report
@@ -318,11 +339,14 @@ pytest tests/unit/test_chain.py -v
 
 # Run only integration tests
 pytest tests/integration/ -v
+
+# Run only API tests
+pytest tests/unit/test_api_*.py tests/integration/test_api.py -v
 ```
 
 **Test breakdown:**
-- Unit tests: 162 (loaders, chunkers, embedder, cache, retrievers, rerankers, LLM, prompts, chain)
-- Integration tests: 4 (full ingestion pipeline with mocked embeddings)
+- Unit tests: 195 (loaders, chunkers, embedder, cache, retrievers, rerankers, LLM, prompts, chain, API endpoints)
+- Integration tests: 16 (ingestion pipeline + full API request/response cycle)
 
 All external APIs (OpenAI, Anthropic, ChromaDB) are mocked in tests -- no API keys required to run the test suite.
 
@@ -354,6 +378,11 @@ All settings are managed through environment variables (`.env` file), loaded via
 | `CHROMA_PERSIST_DIR` | `./data/chroma` | ChromaDB storage path |
 | `RETRIEVAL_TOP_K` | `10` | Documents to retrieve |
 | `RERANK_TOP_K` | `5` | Documents after reranking |
+| `API_HOST` | `0.0.0.0` | API server bind address |
+| `API_PORT` | `8000` | API server port |
+| `RATE_LIMIT_REQUESTS` | `60` | Max requests per rate limit window |
+| `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
+| `CORS_ORIGINS` | `*` | Comma-separated CORS origins |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
 ## License

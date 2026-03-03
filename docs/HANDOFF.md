@@ -2,9 +2,9 @@
 
 ## Current Status
 
-**Phase:** 2 - Retrieval & Generation
-**Step:** 5-6 - LLM Generation & RAG Chain (COMPLETE)
-**Tests:** 166/166 passing (162 unit + 4 integration)
+**Phase:** 3 - API & Evaluation
+**Step:** 7 - FastAPI Backend (COMPLETE)
+**Tests:** 211/211 passing (195 unit + 16 integration)
 **Lint:** Clean (ruff + mypy)
 
 ## What's Been Done
@@ -82,11 +82,11 @@
   - `tests/unit/test_embedder.py` - Mock OpenAI API, batch splitting, retry logic, token counting, dimensions
   - `tests/unit/test_cache.py` - Cache hit/miss, TTL, stats, CachedEmbedder routing
 - **Integration test**:
-  - `tests/integration/test_ingestion_pipeline.py` - End-to-end: load → chunk → embed → store → search, metadata filtering
+  - `tests/integration/test_ingestion_pipeline.py` - End-to-end: load -> chunk -> embed -> store -> search, metadata filtering
 
 ### Phase 2, Step 4 - Hybrid Retrieval
 - **Retrieval strategies** (`src/retrieval/retriever.py`):
-  - `BaseRetriever` - Abstract base class with `retrieve(query, k)` → `list[SearchResult]`
+  - `BaseRetriever` - Abstract base class with `retrieve(query, k)` -> `list[SearchResult]`
   - `SemanticRetriever` - Dense vector retrieval via embedder + vector store, supports metadata filtering
   - `BM25Retriever` - Sparse keyword retrieval using rank-bm25 (Okapi BM25), whitespace tokenizer, scores normalized to 0-1
   - `HybridRetriever` - Combines semantic + BM25 using Reciprocal Rank Fusion (RRF), configurable weights (default 0.7/0.3), rrf_k=60, fetches k*3 candidates from each retriever
@@ -96,7 +96,7 @@
   - `HyDE` - Hypothetical Document Embedding: LLM generates a hypothetical answer, embeds that instead of raw query
   - `MultiQueryRetriever` - Expands query via QueryExpander, retrieves for each variant, deduplicates by doc_id keeping highest score
 - **Reranking** (`src/retrieval/reranker.py`):
-  - `BaseReranker` - Abstract base class with `rerank(query, results, top_k)` → `list[SearchResult]`
+  - `BaseReranker` - Abstract base class with `rerank(query, results, top_k)` -> `list[SearchResult]`
   - `CrossEncoderReranker` - Uses sentence-transformers cross-encoder (ms-marco-MiniLM-L-6-v2), lazy model loading, scores each (query, doc) pair
   - `LLMReranker` - Uses Claude/GPT to score relevance 1-10, batch processing to minimize API calls, handles parse failures gracefully
 - **Unit tests**:
@@ -118,7 +118,7 @@
   - `format_context()` - Formats search results into numbered sections with source info, truncates at MAX_CONTEXT_CHARS (12000)
   - `format_rag_prompt()` / `format_query_expansion_prompt()` / `format_hyde_prompt()` - Build final prompts
 - **RAG chain** (`src/generation/chain.py`):
-  - `RAGChain` - Orchestrates full pipeline: retrieve → rerank (optional) → format context → generate → parse citations
+  - `RAGChain` - Orchestrates full pipeline: retrieve -> rerank (optional) -> format context -> generate -> parse citations
   - `RAGResponse` - Dataclass with answer, sources, citations, metadata (latency_ms, tokens_used, num_retrieved, num_reranked)
   - `Source` - Dataclass with source_name, chunk_text, chunk_index, relevance_score
   - Error handling at every stage with graceful degradation
@@ -128,23 +128,55 @@
   - `parse_citations()` - Extracts [Source: filename, chunk N] citations from LLM output
   - `validate_citations()` - Checks citations against actually retrieved sources
   - `strip_invalid_citations()` - Removes hallucinated citations from response
-  - `process_response()` - Full pipeline: parse → validate → clean
+  - `process_response()` - Full pipeline: parse -> validate -> clean
 - **Unit tests**:
   - `tests/unit/test_llm.py` - Claude/OpenAI generate, retry logic, token tracking, async, FallbackLLM switching, LLMFactory
   - `tests/unit/test_prompts.py` - Template placeholders, context formatting, truncation, citation instructions
   - `tests/unit/test_chain.py` - Full pipeline, no results, LLM failure, retrieval failure, reranker failure, skippable reranking, citation validation, latency tracking
 
+### Phase 3, Step 7 - FastAPI Backend
+- **API schemas** (`src/api/schemas.py`):
+  - `QueryRequest` - question, k, rerank, rerank_top_k, provider (with validation)
+  - `QueryResponse` - answer, sources (SourceSchema), citations (CitationSchema), metadata
+  - `IngestRequest` / `IngestResponse` - source_path, doc_type with validation patterns
+  - `IngestURLRequest` / `IngestBatchRequest` - URL and batch ingestion schemas
+  - `EvalRequest` / `EvalResponse` - Q&A pairs, per-question and aggregate metrics
+  - `HealthResponse` - status, version, per-component health checks
+  - `ErrorResponse` - consistent error format (detail + error_code)
+- **Middleware** (`src/api/middleware/`):
+  - `RateLimitMiddleware` - Sliding-window per-IP rate limiter, configurable via settings, rate limit headers (X-RateLimit-Limit/Remaining/Window), skips /health and /docs
+  - `RequestLoggingMiddleware` - Correlation IDs (X-Request-ID), per-request timing, structured logging on start/complete/failure
+- **Routes** (`src/api/routes/`):
+  - `POST /api/v1/query` - Full RAG pipeline: configurable provider, reranking toggle, returns sources + citations + metadata
+  - `POST /api/v1/ingest` - Load, preprocess, chunk, embed, and store documents from file path or URL
+  - `POST /api/v1/ingest/upload` - Direct file upload with temp file handling and background cleanup
+  - `POST /api/v1/evaluate` - Run RAG against Q&A pairs, per-question metrics, aggregate latency
+  - `GET /health` - Component-level health checks (vectorstore status, document count)
+- **Application** (`src/api/main.py`):
+  - CORS middleware (configurable origins via `CORS_ORIGINS` env var)
+  - Lifecycle management (startup/shutdown logging)
+  - Global exception handler (500 with consistent error format)
+  - Versioned API prefix (`/api/v1/`)
+  - OpenAPI docs at `/docs`, ReDoc at `/redoc`
+- **Unit tests** (45 new tests):
+  - `tests/unit/test_api_query.py` - 11 tests: successful query, parameter passing, validation, pipeline errors, rate limit headers
+  - `tests/unit/test_api_ingest.py` - 11 tests: successful ingest, file upload, doc type handling, error cases
+  - `tests/unit/test_api_evaluate.py` - 8 tests: evaluation pipeline, error handling, custom provider, validation
+  - `tests/unit/test_api_health.py` - 4 tests: healthy/degraded status, version, rate limit bypass
+- **Integration tests** (12 new tests):
+  - `tests/integration/test_api.py` - OpenAPI schema, route registration, middleware (request IDs, rate limits), CORS preflight, global error handler
+
 ## What's Next
 
-**Phase 3**: API & Evaluation
-- FastAPI endpoints for query and ingestion
-- Streaming response support
-- Evaluation framework (faithfulness, relevance, answer quality)
-- End-to-end integration tests
+**Phase 3 (continued)**: Evaluation & Polish
+- Streaming response support (SSE)
+- RAGAS evaluation framework integration
+- End-to-end evaluation tests with sample documents
+- Performance optimization (async endpoints, connection pooling)
 
 ## Key Files
 
-- `src/config/settings.py` - All configuration (chunk_size, embedding_model, chroma_persist_dir, retrieval_top_k, rerank_top_k, llm_model, etc.)
+- `src/config/settings.py` - All configuration (chunk_size, embedding_model, chroma_persist_dir, retrieval_top_k, rerank_top_k, llm_model, cors_origins, etc.)
 - `src/models/document.py` - Universal Document model
 - `src/ingestion/loader.py` - Document loaders (PDF, Markdown, Text, Web)
 - `src/ingestion/chunker.py` - Chunking strategies (Recursive, Semantic)
@@ -160,7 +192,14 @@
 - `src/generation/prompts.py` - RAG prompt templates and formatters
 - `src/generation/chain.py` - RAGChain orchestrator, RAGResponse, Source
 - `src/generation/response_parser.py` - Citation parsing and validation
-- `src/api/main.py` - FastAPI app entry point
+- `src/api/main.py` - FastAPI app with CORS, lifecycle, middleware, routes
+- `src/api/schemas.py` - Pydantic request/response schemas (Query, Ingest, Eval, Health, Error)
+- `src/api/routes/query.py` - Query endpoint (builds RAGChain per request)
+- `src/api/routes/ingest.py` - Ingest endpoint (full ingestion pipeline)
+- `src/api/routes/evaluate.py` - Evaluation endpoint (Q&A pair testing)
+- `src/api/routes/health.py` - Health check with component status
+- `src/api/middleware/rate_limit.py` - Sliding-window per-IP rate limiter
+- `src/api/middleware/logging.py` - Request logging with correlation IDs
 - `scripts/seed_db.sh` - Seed ChromaDB with sample docs
 - `data/sample_docs/` - Sample technical documents for testing
 
@@ -174,12 +213,17 @@
 - **Embedder** uses Decorator pattern (`CachedEmbedder` wraps any `BaseEmbedder`) for composable caching
 - **Embedding cache** is file-based with sharded directories to avoid filesystem limits on large caches
 - **Vector store** uses Abstract Factory pattern - swap ChromaDB for Pinecone/Qdrant by implementing `VectorStore`
-- **ChromaDB metadata** is sanitized automatically (lists → comma-separated strings, None values dropped)
+- **ChromaDB metadata** is sanitized automatically (lists -> comma-separated strings, None values dropped)
 - **Retrieval** uses Strategy pattern: all retrievers implement `BaseRetriever.retrieve()`, allowing easy swapping
 - **Hybrid search** uses Reciprocal Rank Fusion (RRF) to combine dense (semantic) and sparse (BM25) results
 - **LLM layer** uses Strategy + Factory patterns: BaseLLM interface, LLMFactory for creation, FallbackLLM for resilience
 - **Rerankers** use lazy loading (cross-encoder model loaded on first call) to avoid startup cost
 - **Query transforms** are composable: MultiQueryRetriever wraps any BaseRetriever + QueryExpander
 - **RAG chain** is a configurable pipeline with graceful degradation at every stage (retrieval, reranking, generation)
-- **Citation validation** ensures LLM doesn't hallucinate sources — only citations matching retrieved docs are kept
+- **Citation validation** ensures LLM doesn't hallucinate sources -- only citations matching retrieved docs are kept
 - **Token tracking** is cumulative across all LLM calls, surfaced in RAGResponse metadata
+- **API routes** use lazy imports to avoid importing heavy ML models at startup
+- **Rate limiter** is sliding-window per-IP, skips health/docs endpoints, returns standard rate limit headers
+- **Middleware order** matters: CORS -> logging -> rate limiting (outermost first)
+- **Versioned API** prefix `/api/v1/` allows future API evolution without breaking clients
+- **Global exception handler** ensures all unhandled errors return a consistent JSON error format

@@ -130,8 +130,7 @@ class LLMReranker(BaseReranker):
             List of relevance scores (1-10) for each result.
         """
         docs_text = "\n\n".join(
-            f"[Document {i + 1}]\n{r.document.content[:500]}"
-            for i, r in enumerate(results)
+            f"[Document {i + 1}]\n{r.document.content[:500]}" for i, r in enumerate(results)
         )
 
         prompt = (

@@ -83,7 +83,10 @@ class RAGChain:
             logger.error("rag_retrieve_failed", error=str(e))
             return RAGResponse(
                 answer="I encountered an error while searching for relevant information.",
-                metadata={"error": f"retrieval_failed: {e}", "latency_ms": round((perf_counter() - total_start) * 1000, 1)},
+                metadata={
+                    "error": f"retrieval_failed: {e}",
+                    "latency_ms": round((perf_counter() - total_start) * 1000, 1),
+                },
             )
         timings["retrieve_ms"] = round((perf_counter() - stage_start) * 1000, 1)
 
@@ -129,9 +132,7 @@ class RAGChain:
         timings["generate_ms"] = round((perf_counter() - stage_start) * 1000, 1)
 
         # --- Stage 4: Parse and validate citations ---
-        valid_sources = {
-            r.document.metadata.get("source", "unknown") for r in results
-        }
+        valid_sources = {r.document.metadata.get("source", "unknown") for r in results}
         answer, citations = process_response(raw_answer, valid_sources)
 
         # Build sources list

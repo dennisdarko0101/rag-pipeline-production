@@ -74,10 +74,7 @@ class TestFormatContext:
 
     def test_truncates_long_context(self) -> None:
         # Create results that exceed MAX_CONTEXT_CHARS
-        results = [
-            _make_result(f"d{i}", "x" * 5000, chunk_index=i, rank=i)
-            for i in range(10)
-        ]
+        results = [_make_result(f"d{i}", "x" * 5000, chunk_index=i, rank=i) for i in range(10)]
         context = format_context(results, max_chars=500)
         assert len(context) <= 600  # Allow some overhead for headers and truncation marker
 

@@ -52,9 +52,20 @@ uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 The API is available at:
-- API: `http://localhost:8000`
+- API: `http://localhost:8000/api/v1/`
 - OpenAPI docs: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
 - Health check: `http://localhost:8000/health`
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/query` | Run the full RAG pipeline (retrieve, rerank, generate) |
+| `POST` | `/api/v1/ingest` | Ingest a document from a file path or URL |
+| `POST` | `/api/v1/ingest/upload` | Upload and ingest a file directly |
+| `POST` | `/api/v1/evaluate` | Evaluate RAG quality against Q&A pairs |
+| `GET` | `/health` | Component-level health check |
 
 ### Running the Streamlit UI
 
@@ -185,6 +196,7 @@ At minimum, you need `OPENAI_API_KEY` for embeddings. For generation, you need a
 | `API_PORT` | `8000` | API server port |
 | `RATE_LIMIT_REQUESTS` | `60` | Max requests per window |
 | `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
+| `CORS_ORIGINS` | `*` | Comma-separated CORS origins |
 
 ## Seeding the Database
 
@@ -245,6 +257,6 @@ GitHub Actions runs on every push and PR to `main`:
 | Lint | `ruff check` | Code quality and style rules |
 | Format | `ruff format --check` | Consistent code formatting |
 | Type check | `mypy` | Static type analysis (strict mode) |
-| Test | `pytest --cov` | All 166 tests + coverage upload to Codecov |
+| Test | `pytest --cov` | All 211 tests + coverage upload to Codecov |
 
 Configuration: `.github/workflows/ci.yml`

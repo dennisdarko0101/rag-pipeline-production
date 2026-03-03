@@ -8,9 +8,7 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # Matches [Source: filename, chunk N] or [Source: filename, Chunk N]
-_CITATION_PATTERN = re.compile(
-    r"\[Source:\s*([^,\]]+?),\s*[Cc]hunk\s*(\d+)\]"
-)
+_CITATION_PATTERN = re.compile(r"\[Source:\s*([^,\]]+?),\s*[Cc]hunk\s*(\d+)\]")
 
 
 @dataclass

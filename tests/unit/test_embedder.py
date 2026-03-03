@@ -11,9 +11,7 @@ from src.embeddings.embedder import BaseEmbedder, OpenAIEmbedder
 def _make_embedding_response(embeddings: list[list[float]]) -> MagicMock:
     """Create a mock OpenAI embeddings response."""
     mock_response = MagicMock()
-    mock_response.data = [
-        MagicMock(embedding=emb, index=i) for i, emb in enumerate(embeddings)
-    ]
+    mock_response.data = [MagicMock(embedding=emb, index=i) for i, emb in enumerate(embeddings)]
     return mock_response
 
 
@@ -102,9 +100,7 @@ class TestOpenAIEmbedder:
     def test_retry_exhausted_raises(self, mock_async_cls: MagicMock, mock_cls: MagicMock) -> None:
         """Test that after 3 retries the error propagates."""
         mock_client = MagicMock()
-        mock_client.embeddings.create.side_effect = openai.APIConnectionError(
-            request=MagicMock()
-        )
+        mock_client.embeddings.create.side_effect = openai.APIConnectionError(request=MagicMock())
         mock_cls.return_value = mock_client
 
         embedder = OpenAIEmbedder(api_key="test-key")
@@ -127,7 +123,9 @@ class TestOpenAIEmbedder:
         assert len(result) == 512
         # Verify dimensions was passed to the API
         call_kwargs = mock_client.embeddings.create.call_args
-        assert call_kwargs.kwargs.get("dimensions") == 512 or call_kwargs[1].get("dimensions") == 512
+        assert (
+            call_kwargs.kwargs.get("dimensions") == 512 or call_kwargs[1].get("dimensions") == 512
+        )
 
     @patch("src.embeddings.embedder.openai.OpenAI")
     @patch("src.embeddings.embedder.openai.AsyncOpenAI")

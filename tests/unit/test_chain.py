@@ -52,8 +52,17 @@ def _make_mock_reranker(results: list[SearchResult] | None = None) -> MagicMock:
 class TestRAGChain:
     def test_full_pipeline(self) -> None:
         results = [
-            _make_result("d1", "RAG combines retrieval and generation.", source="rag.md", chunk_index=0),
-            _make_result("d2", "Embeddings map text to vectors.", source="embed.md", chunk_index=1, score=0.8, rank=1),
+            _make_result(
+                "d1", "RAG combines retrieval and generation.", source="rag.md", chunk_index=0
+            ),
+            _make_result(
+                "d2",
+                "Embeddings map text to vectors.",
+                source="embed.md",
+                chunk_index=1,
+                score=0.8,
+                rank=1,
+            ),
         ]
         reranked = [results[0]]  # Reranker picks top 1
 
@@ -206,7 +215,10 @@ class TestRAGChain:
         chain.query("question")
 
         call_kwargs = llm.generate.call_args
-        assert call_kwargs.kwargs.get("system") == "Custom system prompt" or call_kwargs[1].get("system") == "Custom system prompt"
+        assert (
+            call_kwargs.kwargs.get("system") == "Custom system prompt"
+            or call_kwargs[1].get("system") == "Custom system prompt"
+        )
 
     def test_citations_in_response(self) -> None:
         results = [

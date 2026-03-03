@@ -16,7 +16,9 @@ from src.generation.llm import (
 )
 
 
-def _mock_claude_response(text: str = "Hello!", input_tokens: int = 10, output_tokens: int = 5) -> MagicMock:
+def _mock_claude_response(
+    text: str = "Hello!", input_tokens: int = 10, output_tokens: int = 5
+) -> MagicMock:
     """Create a mock Anthropic Message response."""
     response = MagicMock()
     response.content = [MagicMock(text=text)]
@@ -24,7 +26,9 @@ def _mock_claude_response(text: str = "Hello!", input_tokens: int = 10, output_t
     return response
 
 
-def _mock_openai_response(text: str = "Hello!", prompt_tokens: int = 10, completion_tokens: int = 5) -> MagicMock:
+def _mock_openai_response(
+    text: str = "Hello!", prompt_tokens: int = 10, completion_tokens: int = 5
+) -> MagicMock:
     """Create a mock OpenAI ChatCompletion response."""
     response = MagicMock()
     response.choices = [MagicMock(message=MagicMock(content=text))]
@@ -121,9 +125,7 @@ class TestClaudeLLM:
     @patch("src.generation.llm.anthropic.Anthropic")
     def test_retry_exhausted_raises(self, mock_cls: MagicMock, mock_async_cls: MagicMock) -> None:
         mock_client = MagicMock()
-        mock_client.messages.create.side_effect = anthropic.APIConnectionError(
-            request=MagicMock()
-        )
+        mock_client.messages.create.side_effect = anthropic.APIConnectionError(request=MagicMock())
         mock_cls.return_value = mock_client
 
         llm = ClaudeLLM(api_key="test-key")
@@ -139,7 +141,9 @@ class TestClaudeLLM:
         mock_client.messages.create.return_value = _mock_claude_response()
         mock_cls.return_value = mock_client
 
-        llm = ClaudeLLM(api_key="test-key", model="claude-3-haiku-20240307", temperature=0.5, max_tokens=500)
+        llm = ClaudeLLM(
+            api_key="test-key", model="claude-3-haiku-20240307", temperature=0.5, max_tokens=500
+        )
         llm.generate("Test")
 
         call_kwargs = mock_client.messages.create.call_args.kwargs
@@ -152,7 +156,9 @@ class TestClaudeLLM:
     @patch("src.generation.llm.anthropic.AsyncAnthropic")
     async def test_agenerate(self, mock_async_cls: MagicMock, mock_cls: MagicMock) -> None:
         mock_async_client = AsyncMock()
-        mock_async_client.messages.create.return_value = _mock_claude_response("Async answer", 12, 6)
+        mock_async_client.messages.create.return_value = _mock_claude_response(
+            "Async answer", 12, 6
+        )
         mock_async_cls.return_value = mock_async_client
 
         llm = ClaudeLLM(api_key="test-key")
@@ -167,7 +173,9 @@ class TestOpenAILLM:
     @patch("src.generation.llm.openai.OpenAI")
     def test_generate(self, mock_cls: MagicMock, mock_async_cls: MagicMock) -> None:
         mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = _mock_openai_response("GPT answer", 12, 7)
+        mock_client.chat.completions.create.return_value = _mock_openai_response(
+            "GPT answer", 12, 7
+        )
         mock_cls.return_value = mock_client
 
         llm = OpenAILLM(api_key="test-key")
@@ -242,7 +250,9 @@ class TestOpenAILLM:
     @patch("src.generation.llm.openai.AsyncOpenAI")
     async def test_agenerate(self, mock_async_cls: MagicMock, mock_cls: MagicMock) -> None:
         mock_async_client = AsyncMock()
-        mock_async_client.chat.completions.create.return_value = _mock_openai_response("Async GPT", 10, 5)
+        mock_async_client.chat.completions.create.return_value = _mock_openai_response(
+            "Async GPT", 10, 5
+        )
         mock_async_cls.return_value = mock_async_client
 
         llm = OpenAILLM(api_key="test-key")

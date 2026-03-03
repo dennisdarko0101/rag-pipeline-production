@@ -334,13 +334,15 @@ class FallbackLLM(BaseLLM):
             result = self._primary.generate(prompt, system)
             self._stats.primary_successes += 1
             self._combined_usage.record(
-                self._primary.usage.input_tokens - (self._combined_usage.input_tokens - self._combined_usage.input_tokens),
+                self._primary.usage.input_tokens
+                - (self._combined_usage.input_tokens - self._combined_usage.input_tokens),
                 0,
             )
             # Sync usage from primary
             self._combined_usage = TokenUsage(
                 input_tokens=self._primary.usage.input_tokens + self._secondary.usage.input_tokens,
-                output_tokens=self._primary.usage.output_tokens + self._secondary.usage.output_tokens,
+                output_tokens=self._primary.usage.output_tokens
+                + self._secondary.usage.output_tokens,
                 total_calls=self._primary.usage.total_calls + self._secondary.usage.total_calls,
             )
             logger.info("fallback_llm_generate", provider="primary")
@@ -354,7 +356,8 @@ class FallbackLLM(BaseLLM):
             self._stats.fallback_successes += 1
             self._combined_usage = TokenUsage(
                 input_tokens=self._primary.usage.input_tokens + self._secondary.usage.input_tokens,
-                output_tokens=self._primary.usage.output_tokens + self._secondary.usage.output_tokens,
+                output_tokens=self._primary.usage.output_tokens
+                + self._secondary.usage.output_tokens,
                 total_calls=self._primary.usage.total_calls + self._secondary.usage.total_calls,
             )
             logger.info("fallback_llm_generate", provider="secondary")
@@ -370,7 +373,8 @@ class FallbackLLM(BaseLLM):
             self._stats.primary_successes += 1
             self._combined_usage = TokenUsage(
                 input_tokens=self._primary.usage.input_tokens + self._secondary.usage.input_tokens,
-                output_tokens=self._primary.usage.output_tokens + self._secondary.usage.output_tokens,
+                output_tokens=self._primary.usage.output_tokens
+                + self._secondary.usage.output_tokens,
                 total_calls=self._primary.usage.total_calls + self._secondary.usage.total_calls,
             )
             logger.info("fallback_llm_agenerate", provider="primary")
@@ -383,7 +387,8 @@ class FallbackLLM(BaseLLM):
             self._stats.fallback_successes += 1
             self._combined_usage = TokenUsage(
                 input_tokens=self._primary.usage.input_tokens + self._secondary.usage.input_tokens,
-                output_tokens=self._primary.usage.output_tokens + self._secondary.usage.output_tokens,
+                output_tokens=self._primary.usage.output_tokens
+                + self._secondary.usage.output_tokens,
                 total_calls=self._primary.usage.total_calls + self._secondary.usage.total_calls,
             )
             logger.info("fallback_llm_agenerate", provider="secondary")

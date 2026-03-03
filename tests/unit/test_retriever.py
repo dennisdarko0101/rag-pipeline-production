@@ -54,7 +54,9 @@ class TestSemanticRetriever:
         retriever.retrieve("test", k=3, where={"source": "a.md"})
 
         call_kwargs = mock_store.search.call_args
-        assert call_kwargs.kwargs.get("where") == {"source": "a.md"} or call_kwargs[1].get("where") == {"source": "a.md"}
+        assert call_kwargs.kwargs.get("where") == {"source": "a.md"} or call_kwargs[1].get(
+            "where"
+        ) == {"source": "a.md"}
 
     def test_retrieve_empty_results(self) -> None:
         mock_embedder = MagicMock()

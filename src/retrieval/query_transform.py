@@ -77,11 +77,9 @@ class QueryExpander:
         )
 
         response = _call_llm(prompt)
-        variants = [
-            line.strip()
-            for line in response.strip().splitlines()
-            if line.strip()
-        ][:self._num_variants]
+        variants = [line.strip() for line in response.strip().splitlines() if line.strip()][
+            : self._num_variants
+        ]
 
         # Always include the original query
         result = [query] + variants

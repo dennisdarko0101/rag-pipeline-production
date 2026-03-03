@@ -206,6 +206,25 @@ Reranked Results (top-k documents)
 | `validate_citations()` | `response_parser.py` | Checks citations against actual retrieved sources |
 | `process_response()` | `response_parser.py` | Full pipeline: parse → validate → strip invalid |
 
+### API (`src/api/`)
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `app` | `main.py` | FastAPI app with CORS, lifecycle, middleware stack, route registration |
+| `QueryRequest` | `schemas.py` | Request schema: question, k, rerank, rerank_top_k, provider |
+| `QueryResponse` | `schemas.py` | Response schema: answer, sources, citations, metadata |
+| `IngestRequest` | `schemas.py` | Request schema: source_path, doc_type |
+| `EvalRequest` | `schemas.py` | Request schema: qa_pairs, k, rerank, provider |
+| `HealthResponse` | `schemas.py` | Response schema: status, version, per-component health |
+| `ErrorResponse` | `schemas.py` | Consistent error format: detail, error_code |
+| `query` | `routes/query.py` | POST /api/v1/query -- builds RAGChain per request, returns validated response |
+| `ingest` | `routes/ingest.py` | POST /api/v1/ingest -- full ingestion pipeline from path or URL |
+| `ingest_upload` | `routes/ingest.py` | POST /api/v1/ingest/upload -- file upload with temp file cleanup |
+| `evaluate` | `routes/evaluate.py` | POST /api/v1/evaluate -- runs RAG against Q&A pairs, returns metrics |
+| `health_check` | `routes/health.py` | GET /health -- component-level health (vectorstore status) |
+| `RateLimitMiddleware` | `middleware/rate_limit.py` | Sliding-window per-IP rate limiter with X-RateLimit headers |
+| `RequestLoggingMiddleware` | `middleware/logging.py` | Correlation IDs (X-Request-ID), per-request timing |
+
 ## Design Decisions
 
 ### Why ChromaDB?

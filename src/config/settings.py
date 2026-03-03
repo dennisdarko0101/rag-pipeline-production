@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
     rate_limit_requests: int = 60
     rate_limit_window: int = 60
+    cors_origins: str = "*"
 
     @property
     def chroma_persist_path(self) -> Path:

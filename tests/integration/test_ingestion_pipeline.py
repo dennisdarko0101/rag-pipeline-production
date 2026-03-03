@@ -120,11 +120,13 @@ class TestIngestionPipeline:
         mock_collection.query.return_value = {
             "ids": [["id1", "id2", "id3"]],
             "documents": [["chunk about RAG", "chunk about agents", "chunk about LLMs"]],
-            "metadatas": [[
-                {"source": "rag_systems.md", "file_type": "markdown", "chunk_index": "0"},
-                {"source": "ai_agents.md", "file_type": "markdown", "chunk_index": "2"},
-                {"source": "rag_systems.md", "file_type": "markdown", "chunk_index": "5"},
-            ]],
+            "metadatas": [
+                [
+                    {"source": "rag_systems.md", "file_type": "markdown", "chunk_index": "0"},
+                    {"source": "ai_agents.md", "file_type": "markdown", "chunk_index": "2"},
+                    {"source": "rag_systems.md", "file_type": "markdown", "chunk_index": "5"},
+                ]
+            ],
             "distances": [[0.1, 0.3, 0.5]],
         }
 
