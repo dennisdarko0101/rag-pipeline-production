@@ -3,7 +3,9 @@
 ## Current Status
 
 **Phase:** 2 - Retrieval & Generation
-**Step:** 4 - Hybrid Retrieval (COMPLETE)
+**Step:** 5-6 - LLM Generation & RAG Chain (COMPLETE)
+**Tests:** 166/166 passing (162 unit + 4 integration)
+**Lint:** Clean (ruff + mypy)
 
 ## What's Been Done
 
@@ -101,14 +103,44 @@
   - `tests/unit/test_retriever.py` - Semantic (mock embedder/store), BM25 (index, scoring, normalization), Hybrid (fusion, dedup, weights)
   - `tests/unit/test_reranker.py` - CrossEncoder (mock model, scoring, pairs), LLM (mock LLM, parsing, batching, clamping, truncation)
 
+### Phase 2, Steps 5-6 - LLM Generation & RAG Chain
+- **LLM abstraction** (`src/generation/llm.py`):
+  - `BaseLLM` - Abstract base class with `generate()`, `agenerate()`, and `usage` property
+  - `ClaudeLLM` - Wraps Anthropic API with retry (tenacity, 3 attempts, exponential backoff), token tracking (input/output per call), configurable temperature/max_tokens, async support
+  - `OpenAILLM` - Wraps OpenAI API with same interface, retry logic, and token tracking
+  - `FallbackLLM` - Tries primary (Claude), falls back to secondary (OpenAI) on failure, tracks fallback frequency and provider usage
+  - `LLMFactory` - Creates LLM instances by provider name ("claude", "openai", "fallback")
+  - `TokenUsage` - Dataclass tracking cumulative input_tokens, output_tokens, total_calls
+- **Prompt templates** (`src/generation/prompts.py`):
+  - `RAG_SYSTEM_PROMPT` - Instructs LLM to answer only from context, cite sources, say "I don't have enough information" when context is insufficient
+  - `RAG_USER_PROMPT_TEMPLATE` - Template with {context} and {question} placeholders
+  - `QUERY_EXPANSION_PROMPT` / `HYDE_PROMPT` - Templates for query transformation
+  - `format_context()` - Formats search results into numbered sections with source info, truncates at MAX_CONTEXT_CHARS (12000)
+  - `format_rag_prompt()` / `format_query_expansion_prompt()` / `format_hyde_prompt()` - Build final prompts
+- **RAG chain** (`src/generation/chain.py`):
+  - `RAGChain` - Orchestrates full pipeline: retrieve → rerank (optional) → format context → generate → parse citations
+  - `RAGResponse` - Dataclass with answer, sources, citations, metadata (latency_ms, tokens_used, num_retrieved, num_reranked)
+  - `Source` - Dataclass with source_name, chunk_text, chunk_index, relevance_score
+  - Error handling at every stage with graceful degradation
+  - Configurable: skip reranking, custom system prompt, adjustable k/rerank_top_k
+  - Full structured logging with per-stage timing (retrieve_ms, rerank_ms, generate_ms)
+- **Response parser** (`src/generation/response_parser.py`):
+  - `parse_citations()` - Extracts [Source: filename, chunk N] citations from LLM output
+  - `validate_citations()` - Checks citations against actually retrieved sources
+  - `strip_invalid_citations()` - Removes hallucinated citations from response
+  - `process_response()` - Full pipeline: parse → validate → clean
+- **Unit tests**:
+  - `tests/unit/test_llm.py` - Claude/OpenAI generate, retry logic, token tracking, async, FallbackLLM switching, LLMFactory
+  - `tests/unit/test_prompts.py` - Template placeholders, context formatting, truncation, citation instructions
+  - `tests/unit/test_chain.py` - Full pipeline, no results, LLM failure, retrieval failure, reranker failure, skippable reranking, citation validation, latency tracking
+
 ## What's Next
 
-**Phase 2, Step 5**: RAG Generation Pipeline
-- LLM integration (Claude/GPT) with prompt templates
-- Context assembly from retrieved chunks
-- Response generation with citations
-- Evaluation metrics (faithfulness, relevance)
-- End-to-end RAG pipeline orchestrator
+**Phase 3**: API & Evaluation
+- FastAPI endpoints for query and ingestion
+- Streaming response support
+- Evaluation framework (faithfulness, relevance, answer quality)
+- End-to-end integration tests
 
 ## Key Files
 
@@ -124,6 +156,10 @@
 - `src/retrieval/retriever.py` - SemanticRetriever, BM25Retriever, HybridRetriever
 - `src/retrieval/query_transform.py` - QueryExpander, HyDE, MultiQueryRetriever
 - `src/retrieval/reranker.py` - CrossEncoderReranker, LLMReranker
+- `src/generation/llm.py` - BaseLLM, ClaudeLLM, OpenAILLM, FallbackLLM, LLMFactory
+- `src/generation/prompts.py` - RAG prompt templates and formatters
+- `src/generation/chain.py` - RAGChain orchestrator, RAGResponse, Source
+- `src/generation/response_parser.py` - Citation parsing and validation
 - `src/api/main.py` - FastAPI app entry point
 - `scripts/seed_db.sh` - Seed ChromaDB with sample docs
 - `data/sample_docs/` - Sample technical documents for testing
@@ -141,6 +177,9 @@
 - **ChromaDB metadata** is sanitized automatically (lists → comma-separated strings, None values dropped)
 - **Retrieval** uses Strategy pattern: all retrievers implement `BaseRetriever.retrieve()`, allowing easy swapping
 - **Hybrid search** uses Reciprocal Rank Fusion (RRF) to combine dense (semantic) and sparse (BM25) results
-- **LLM calls** use dual-provider pattern: Claude primary, GPT-4o fallback, configured via settings
+- **LLM layer** uses Strategy + Factory patterns: BaseLLM interface, LLMFactory for creation, FallbackLLM for resilience
 - **Rerankers** use lazy loading (cross-encoder model loaded on first call) to avoid startup cost
 - **Query transforms** are composable: MultiQueryRetriever wraps any BaseRetriever + QueryExpander
+- **RAG chain** is a configurable pipeline with graceful degradation at every stage (retrieval, reranking, generation)
+- **Citation validation** ensures LLM doesn't hallucinate sources — only citations matching retrieved docs are kept
+- **Token tracking** is cumulative across all LLM calls, surfaced in RAGResponse metadata
