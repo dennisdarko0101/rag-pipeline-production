@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from src.config.settings import Settings
 
 
@@ -20,4 +22,4 @@ def test_chroma_persist_path():
         openai_api_key="test-key",
         chroma_persist_dir="/tmp/test-chroma",
     )
-    assert str(s.chroma_persist_path) == "/tmp/test-chroma"
+    assert s.chroma_persist_path == Path("/tmp/test-chroma")
