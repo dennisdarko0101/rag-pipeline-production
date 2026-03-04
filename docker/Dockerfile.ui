@@ -1,0 +1,57 @@
+# =============================================================================
+# RAG Pipeline — Streamlit UI (Lighter Image)
+# =============================================================================
+# Only installs UI dependencies (streamlit, httpx) — no ML models.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Stage 1: Builder
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install only the UI-specific dependencies (no ML/torch/sentence-transformers)
+RUN pip install --no-cache-dir --prefix=/install \
+    streamlit>=1.38.0 \
+    httpx>=0.27.0
+
+# ---------------------------------------------------------------------------
+# Stage 2: Production
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim AS production
+
+LABEL maintainer="Dennis Darko"
+LABEL org.opencontainers.image.title="rag-pipeline-ui"
+LABEL org.opencontainers.image.description="Streamlit dashboard for the RAG pipeline"
+LABEL org.opencontainers.image.version="0.1.0"
+
+WORKDIR /app
+
+# Create non-root user
+RUN groupadd --gid 1000 appuser \
+    && useradd --uid 1000 --gid 1000 --create-home appuser
+
+# Copy installed Python packages from builder
+COPY --from=builder /install/lib /usr/local/lib
+COPY --from=builder /install/bin /usr/local/bin
+
+# Copy only the UI source
+COPY ui/ ui/
+COPY tests/eval/eval_dataset.json tests/eval/eval_dataset.json
+
+# Create runtime directories
+RUN mkdir -p eval_results \
+    && chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose Streamlit port
+EXPOSE 8501
+
+# Health check — Streamlit health endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import httpx; httpx.get('http://localhost:8501/_stcore/health').raise_for_status()"
+
+CMD ["streamlit", "run", "ui/app.py", "--server.port", "8501", "--server.address", "0.0.0.0", "--server.headless", "true"]

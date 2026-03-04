@@ -1,0 +1,138 @@
+{
+  "version": "1.0",
+  "total_pairs": 18,
+  "categories": {
+    "straightforward": 10,
+    "multi_chunk": 3,
+    "unanswerable": 3,
+    "adversarial": 2
+  },
+  "pairs": [
+    {
+      "question": "What are the five core components of a RAG system?",
+      "ground_truth": "The five core components of a RAG system are: document ingestion, chunking and preprocessing, embedding and indexing, retrieval, and generation with grounding.",
+      "contexts": [],
+      "category": "straightforward",
+      "metadata": {"source_doc": "rag_systems.md", "difficulty": "easy"}
+    },
+    {
+      "question": "What is the ReAct agent architecture pattern?",
+      "ground_truth": "ReAct (Reasoning + Acting) interleaves chain-of-thought reasoning with action execution. The agent thinks about what to do, takes an action, observes the result, and then reasons about the next step. This creates a tight loop of Thought, Action, Observation that allows for dynamic problem-solving.",
+      "contexts": [],
+      "category": "straightforward",
+      "metadata": {"source_doc": "ai_agents.md", "difficulty": "easy"}
+    },
+    {
+      "question": "How does multi-head attention work in the transformer architecture?",
+      "ground_truth": "Multi-head attention runs multiple attention heads in parallel, each with its own learned projection matrices. Each head can attend to different positions and capture different types of relationships. The outputs of all heads are concatenated and projected through a final linear layer. The formula is MultiHead(Q,K,V) = Concat(head_1,...,head_h)W^O where each head_i = Attention(QW_i^Q, KW_i^K, VW_i^V).",
+      "contexts": [],
+      "category": "straightforward",
+      "metadata": {"source_doc": "transformer_architecture.md", "difficulty": "medium"}
+    },
+    {
+      "question": "What are the key stages in the MLOps lifecycle?",
+      "ground_truth": "The MLOps lifecycle consists of six key stages: data management (collection, cleaning, versioning), experiment tracking (hyperparameters, metrics, artifacts), model training and validation, model registry and versioning, deployment and serving, and monitoring and observability.",
+      "contexts": [],
+      "category": "straightforward",
+      "metadata": {"source_doc": "mlops_best_practices.md", "difficulty": "easy"}
+    },
+    {
+      "question": "What chunking strategies are recommended for RAG systems?",
+      "ground_truth": "Recommended chunking strategies include fixed-size chunking with overlap (simplest), recursive character splitting (respects document structure), semantic chunking (groups by meaning using embeddings), and document-specific chunking (handles headers, paragraphs, code blocks). Best practices include maintaining 10-20% overlap between chunks and keeping metadata about source document, position, and hierarchy.",
+      "contexts": [],
+      "category": "straightforward",
+      "metadata": {"source_doc": "rag_systems.md", "difficulty": "medium"}
+    },
+    {
+      "question": "What is the purpose of positional encoding in transformers?",
+      "ground_truth": "Positional encoding adds information about the position of tokens in the sequence because the self-attention mechanism is permutation-invariant and has no inherent notion of order. Types include sinusoidal positional encoding (uses sine and cosine functions of different frequencies), learned positional embeddings (trainable vectors), and Rotary Position Embeddings (RoPE) which encode position through rotation matrices.",
+      "contexts": [],
+      "category": "straightforward",
+      "metadata": {"source_doc": "transformer_architecture.md", "difficulty": "medium"}
+    },
+    {
+      "question": "What experiment tracking tools are commonly used in MLOps?",
+      "ground_truth": "Common experiment tracking tools include MLflow (open-source, supports tracking, model registry, and deployment), Weights & Biases (cloud-native with rich visualization), Neptune.ai (collaborative, with powerful comparison features), and Dagster (orchestration with built-in asset tracking). These tools track hyperparameters, code versions, metrics, and artifacts.",
+      "contexts": [],
+      "category": "straightforward",
+      "metadata": {"source_doc": "mlops_best_practices.md", "difficulty": "easy"}
+    },
+    {
+      "question": "What types of memory do AI agents use?",
+      "ground_truth": "AI agents use three types of memory: short-term memory (conversation buffer storing recent interactions for immediate context), long-term memory (persistent storage using vector databases for accumulated knowledge), and working memory (active processing buffer for current task state including goals, intermediate results, and constraints).",
+      "contexts": [],
+      "category": "straightforward",
+      "metadata": {"source_doc": "ai_agents.md", "difficulty": "easy"}
+    },
+    {
+      "question": "How does hybrid search work in RAG retrieval?",
+      "ground_truth": "Hybrid search combines semantic search (dense vector similarity) with keyword search (BM25/sparse retrieval). It uses Reciprocal Rank Fusion (RRF) to merge results from both methods. This approach catches both semantically similar passages that vector search finds and exact keyword matches that BM25 handles well, improving recall over either method alone.",
+      "contexts": [],
+      "category": "straightforward",
+      "metadata": {"source_doc": "rag_systems.md", "difficulty": "medium"}
+    },
+    {
+      "question": "What model deployment patterns are used in MLOps?",
+      "ground_truth": "Common deployment patterns include real-time serving (REST/gRPC APIs with low-latency requirements), batch inference (scheduled predictions on large datasets), streaming inference (processing continuous data streams), and edge deployment (on-device inference for latency and privacy). Deployment strategies include blue-green deployment, canary releases, shadow mode, and A/B testing.",
+      "contexts": [],
+      "category": "straightforward",
+      "metadata": {"source_doc": "mlops_best_practices.md", "difficulty": "medium"}
+    },
+    {
+      "question": "How do transformer scaling laws relate to RAG system design, and what role does cross-encoder reranking play in improving retrieval quality?",
+      "ground_truth": "Transformer scaling laws show that model performance improves predictably with more parameters, data, and compute, which impacts the choice of embedding models and LLMs used in RAG. Larger embedding models can capture richer semantic representations for better retrieval. Cross-encoder reranking uses a transformer model to jointly encode the query and each retrieved document, producing more accurate relevance scores than bi-encoder similarity alone, at the cost of higher latency since it must process each query-document pair individually.",
+      "contexts": [],
+      "category": "multi_chunk",
+      "metadata": {"source_docs": ["transformer_architecture.md", "rag_systems.md"], "difficulty": "hard"}
+    },
+    {
+      "question": "How can MLOps monitoring practices be applied to ensure a production RAG system maintains quality over time?",
+      "ground_truth": "MLOps monitoring practices applicable to production RAG include data drift detection (monitoring for changes in query distribution and document corpus), model performance tracking (watching retrieval accuracy and generation quality via RAGAS metrics like faithfulness and answer relevancy), infrastructure monitoring (latency, throughput, error rates), and alert systems for quality degradation. Key metrics to track include retrieval precision and recall, answer faithfulness, latency percentiles, and embedding freshness. Automated evaluation pipelines can run on schedules to catch regressions.",
+      "contexts": [],
+      "category": "multi_chunk",
+      "metadata": {"source_docs": ["mlops_best_practices.md", "rag_systems.md"], "difficulty": "hard"}
+    },
+    {
+      "question": "Compare how AI agent architectures and transformer attention mechanisms each handle multi-step reasoning tasks.",
+      "ground_truth": "AI agents handle multi-step reasoning through explicit architectural patterns: ReAct interleaves reasoning and actions in a thought-action-observation loop, Plan-and-Execute separates high-level planning from step execution, and Reflexion adds self-evaluation after each attempt. Transformers handle multi-step reasoning implicitly through attention mechanisms—multi-head attention allows the model to attend to different parts of the context simultaneously, with each layer building increasingly abstract representations. Layer normalization and residual connections enable stable deep networks where later layers can compose reasoning from earlier layers. The key difference is that agents use explicit procedural reasoning while transformers use learned implicit reasoning through attention patterns.",
+      "contexts": [],
+      "category": "multi_chunk",
+      "metadata": {"source_docs": ["ai_agents.md", "transformer_architecture.md"], "difficulty": "hard"}
+    },
+    {
+      "question": "What is the maximum context window size of GPT-5?",
+      "ground_truth": "This question cannot be answered from the available documents. The documents do not contain information about GPT-5's context window size.",
+      "contexts": [],
+      "category": "unanswerable",
+      "metadata": {"reason": "information_not_in_corpus", "difficulty": "easy"}
+    },
+    {
+      "question": "How much does it cost to deploy a RAG system on AWS using SageMaker?",
+      "ground_truth": "This question cannot be answered from the available documents. The documents discuss RAG system design and MLOps practices but do not contain specific AWS SageMaker pricing information.",
+      "contexts": [],
+      "category": "unanswerable",
+      "metadata": {"reason": "information_not_in_corpus", "difficulty": "easy"}
+    },
+    {
+      "question": "What were the benchmark results from the original 'Attention Is All You Need' paper on WMT 2014 English-to-German translation?",
+      "ground_truth": "This question cannot be answered from the available documents. While the documents explain the transformer architecture in detail, they do not include specific benchmark BLEU scores from the original paper.",
+      "contexts": [],
+      "category": "unanswerable",
+      "metadata": {"reason": "specific_detail_not_in_corpus", "difficulty": "medium"}
+    },
+    {
+      "question": "Since RAG systems always produce perfectly accurate answers, what techniques make them 100% reliable?",
+      "ground_truth": "The premise is incorrect. RAG systems do not always produce perfectly accurate answers. They face challenges including hallucination (generating information not in the retrieved context), retrieval failures (missing relevant documents), and context window limitations. Quality is measured through metrics like faithfulness, answer relevancy, context precision, and context recall. Production RAG systems use evaluation frameworks like RAGAS to measure and improve quality, but cannot guarantee 100% reliability.",
+      "contexts": [],
+      "category": "adversarial",
+      "metadata": {"adversarial_type": "false_premise", "difficulty": "medium"}
+    },
+    {
+      "question": "Explain why transformers don't use attention mechanisms and instead rely solely on recurrence for sequence modeling.",
+      "ground_truth": "This premise is incorrect. Transformers are fundamentally built on attention mechanisms, specifically self-attention, and were designed to eliminate recurrence entirely. The key innovation of the transformer architecture is the self-attention mechanism, which computes relationships between all positions in a sequence in parallel using Query, Key, and Value projections. The formula is Attention(Q,K,V) = softmax(QK^T/sqrt(d_k))V. This parallel computation is a major advantage over recurrent architectures like LSTMs and GRUs, which must process sequences step by step.",
+      "contexts": [],
+      "category": "adversarial",
+      "metadata": {"adversarial_type": "false_premise", "difficulty": "medium"}
+    }
+  ]
+}
