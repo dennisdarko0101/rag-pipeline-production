@@ -88,10 +88,28 @@ class BM25Retriever(BaseRetriever):
         Args:
             documents: List of documents to index.
         """
-        self._documents = list(documents)
-        tokenized = [self._tokenize(doc.content) for doc in self._documents]
-        self._bm25 = BM25Okapi(tokenized)
-        logger.info("bm25_index_built", num_documents=len(self._documents))
+        docs = list(documents)
+        tokenized = [self._tokenize(doc.content) for doc in docs]
+        # Assign the corpus first, then the index, so a concurrent reader in
+        # retrieve() never sees a new index paired with the old document list.
+        self._documents = docs
+        self._bm25 = BM25Okapi(tokenized) if docs else None
+        logger.info("bm25_index_built", num_documents=len(docs))
+
+    def add(self, documents: list[Document]) -> None:
+        """Add documents to the index, rebuilding it.
+
+        Args:
+            documents: New documents to append to the existing corpus.
+        """
+        if not documents:
+            return
+        self.index(self._documents + list(documents))
+
+    @property
+    def num_documents(self) -> int:
+        """Number of documents currently indexed."""
+        return len(self._documents)
 
     def retrieve(self, query: str, k: int = 10) -> list[SearchResult]:
         """Search using BM25 scoring.
@@ -103,13 +121,17 @@ class BM25Retriever(BaseRetriever):
         Returns:
             Ranked search results with BM25 scores normalized to 0-1.
         """
-        if self._bm25 is None or not self._documents:
+        # Snapshot so a concurrent re-index (during ingestion) cannot swap the
+        # corpus out from under us mid-read.
+        bm25 = self._bm25
+        documents = self._documents
+        if bm25 is None or not documents:
             logger.warning("bm25_empty_index")
             return []
 
         start = perf_counter()
         tokens = self._tokenize(query)
-        raw_scores = self._bm25.get_scores(tokens)
+        raw_scores = bm25.get_scores(tokens)
 
         # Normalize scores to 0-1 range
         max_score = max(raw_scores) if max(raw_scores) > 0 else 1.0
@@ -124,7 +146,7 @@ class BM25Retriever(BaseRetriever):
 
         results = [
             SearchResult(
-                document=self._documents[idx],
+                document=documents[idx],
                 score=score,
                 rank=rank,
             )

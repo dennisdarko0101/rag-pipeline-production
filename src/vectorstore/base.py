@@ -64,6 +64,17 @@ class VectorStore(ABC):
         """
 
     @abstractmethod
+    def get_all_documents(self) -> list[Document]:
+        """Return every document currently stored.
+
+        Used to (re)build the in-memory BM25 keyword index from the persisted
+        corpus, so sparse retrieval has the same documents as dense retrieval.
+
+        Returns:
+            All stored documents (content and metadata; no embeddings).
+        """
+
+    @abstractmethod
     def get_stats(self) -> dict:
         """Get statistics about the vector store.
 

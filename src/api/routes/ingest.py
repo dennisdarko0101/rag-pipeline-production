@@ -40,6 +40,12 @@ def _run_ingestion(source_path: str, doc_type: str) -> tuple[int, int]:
     store = ChromaVectorStore()
     store.add_documents(chunks, embeddings)
 
+    # Keep the shared BM25 index in sync so the new chunks are immediately
+    # retrievable by keyword search, not just semantic search.
+    from src.retrieval.bm25_index import add_documents as bm25_add
+
+    bm25_add(chunks)
+
     return len(docs), len(chunks)
 
 

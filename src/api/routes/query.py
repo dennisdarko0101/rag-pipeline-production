@@ -26,14 +26,17 @@ def _build_rag_chain(provider: str, rerank: bool):  # type: ignore[no-untyped-de
     """
     from src.embeddings.embedder import OpenAIEmbedder
     from src.generation.llm import LLMFactory
+    from src.retrieval.bm25_index import get_bm25_retriever
     from src.retrieval.reranker import CrossEncoderReranker
-    from src.retrieval.retriever import BM25Retriever, HybridRetriever, SemanticRetriever
+    from src.retrieval.retriever import HybridRetriever, SemanticRetriever
     from src.vectorstore.chroma_store import ChromaVectorStore
 
     embedder = OpenAIEmbedder()
     store = ChromaVectorStore()
     semantic = SemanticRetriever(embedder=embedder, vector_store=store)
-    bm25 = BM25Retriever()
+    # Shared, corpus-populated BM25 index so hybrid retrieval actually engages
+    # (semantic + BM25 both return candidates, fused by RRF).
+    bm25 = get_bm25_retriever(store)
     retriever = HybridRetriever(semantic=semantic, bm25=bm25)
     llm = LLMFactory.create(provider)
     reranker = CrossEncoderReranker() if rerank else None

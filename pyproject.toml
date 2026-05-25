@@ -69,6 +69,16 @@ disallow_untyped_defs = true
 check_untyped_defs = true
 ignore_missing_imports = true
 
+# Third-party SDKs ship their own rapidly-evolving type hints. We do not want
+# the type check to break every time, for example, the Anthropic SDK adds a new
+# content-block type, so we treat these packages as untyped at the boundary.
+# This also keeps mypy results identical whether or not the optional native
+# dependencies happen to be installed in a given environment.
+[[tool.mypy.overrides]]
+module = ["chromadb.*", "anthropic.*", "openai.*", "structlog.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

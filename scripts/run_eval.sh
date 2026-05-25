@@ -93,7 +93,8 @@ metrics = RAGMetrics(llm=llm)
 
 # Set up the RAG chain (mirrors src/api/routes/query.py)
 from src.embeddings.embedder import OpenAIEmbedder
-from src.retrieval.retriever import BM25Retriever, HybridRetriever, SemanticRetriever
+from src.retrieval.bm25_index import get_bm25_retriever
+from src.retrieval.retriever import HybridRetriever, SemanticRetriever
 from src.retrieval.reranker import CrossEncoderReranker
 from src.vectorstore.chroma_store import ChromaVectorStore
 from src.generation.chain import RAGChain
@@ -101,7 +102,7 @@ from src.generation.chain import RAGChain
 embedder = OpenAIEmbedder()
 store = ChromaVectorStore()
 semantic = SemanticRetriever(embedder=embedder, vector_store=store)
-bm25 = BM25Retriever()
+bm25 = get_bm25_retriever(store)
 retriever = HybridRetriever(semantic=semantic, bm25=bm25)
 reranker = CrossEncoderReranker()
 chain = RAGChain(retriever=retriever, llm=llm, reranker=reranker)

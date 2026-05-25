@@ -5,7 +5,7 @@
 [![Evaluation](https://github.com/dennisdarko0101/rag-pipeline-production/actions/workflows/eval.yml/badge.svg)](https://github.com/dennisdarko0101/rag-pipeline-production/actions/workflows/eval.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests: 272 passing](https://img.shields.io/badge/tests-272%20passing-brightgreen.svg)]()
+[![Tests: 279 passing](https://img.shields.io/badge/tests-279%20passing-brightgreen.svg)]()
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
 A Retrieval-Augmented Generation system built from scratch in Python. It combines hybrid search (semantic plus BM25), cross-encoder reranking, and dual-LLM generation with automatic fallback to produce answers that are grounded in your documents and backed by citations you can check.
@@ -210,7 +210,7 @@ See [docs/EVALUATION.md](docs/EVALUATION.md) for the full methodology.
 | **UI** | Streamlit | Interactive dashboard with a dark theme |
 | **Config** | Pydantic Settings | Type-safe configuration from `.env` |
 | **Logging** | structlog | Structured JSON logging with context |
-| **Testing** | pytest | 272 tests, 80%+ coverage required |
+| **Testing** | pytest | 279 tests, 80%+ coverage required |
 | **Linting** | ruff + mypy | Fast linting and strict type checking |
 | **CI/CD** | GitHub Actions | Lint, test, security scan, Docker push |
 | **Containers** | Docker + Compose | Multi-stage builds, three-service stack |
@@ -235,7 +235,7 @@ rag-pipeline-production/
 │   ├── models/                     # Universal Document model
 │   └── utils/                      # Structured logging, Prometheus metrics
 ├── tests/
-│   ├── unit/                       # 256 unit tests (all external APIs mocked)
+│   ├── unit/                       # 263 unit tests (all external APIs mocked)
 │   ├── integration/                # 16 integration tests
 │   └── eval/                       # Golden dataset (18 Q&A pairs)
 ├── ui/                             # Streamlit dashboard
@@ -264,14 +264,14 @@ rag-pipeline-production/
 ## Testing
 
 ```bash
-make test           # Run all 272 tests
+make test           # Run all 279 tests
 make test-cov       # Run with an HTML coverage report (80%+ required)
 make eval           # Run RAG evaluation against the golden dataset
 ```
 
 All external APIs (OpenAI, Anthropic, ChromaDB) are mocked, so no API keys are needed to run the test suite.
 
-**Breakdown:** 256 unit tests plus 16 integration tests covering loaders, chunkers, the embedder, the cache, retrievers, rerankers, the LLM layer, prompts, the RAG chain, every API endpoint, the evaluation metrics, dataset, and runner, and full request-to-response cycles.
+**Breakdown:** 263 unit tests plus 16 integration tests covering loaders, chunkers, the embedder, the cache, retrievers (including the shared BM25 index), rerankers, the LLM layer, prompts, the RAG chain, every API endpoint, the evaluation metrics, dataset, and runner, and full request-to-response cycles.
 
 ## CI/CD
 

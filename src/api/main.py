@@ -23,6 +23,18 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application startup and shutdown lifecycle."""
     logger.info("app_starting", host=settings.api_host, port=settings.api_port)
+
+    # Warm the shared BM25 index from the persisted corpus so the first query
+    # already has keyword retrieval available (no API key needed for this).
+    try:
+        from src.retrieval.bm25_index import get_bm25_retriever
+        from src.vectorstore.chroma_store import ChromaVectorStore
+
+        bm25 = get_bm25_retriever(ChromaVectorStore())
+        logger.info("bm25_index_warmed", num_documents=bm25.num_documents)
+    except Exception as e:  # pragma: no cover - startup resilience
+        logger.warning("bm25_warm_failed", error=str(e))
+
     yield
     logger.info("app_shutting_down")
 

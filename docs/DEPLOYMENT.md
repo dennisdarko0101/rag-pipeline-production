@@ -279,7 +279,7 @@ Runs on every push and PR to `main`:
 |-----|------|---------------|
 | Lint & Format | `ruff check` + `ruff format --check` | Code quality and style |
 | Type Check | `mypy` | Static type analysis (strict mode) |
-| Test | `pytest --cov --cov-fail-under=80` | 272 tests, Python 3.11 + 3.12, 80%+ coverage required |
+| Test | `pytest --cov --cov-fail-under=80` | 279 tests, Python 3.11 + 3.12, 80%+ coverage required |
 | Security | `pip-audit` | Vulnerability scanning of dependencies |
 
 ### CD (`.github/workflows/cd.yml`)

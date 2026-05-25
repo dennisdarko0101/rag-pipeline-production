@@ -31,7 +31,7 @@ ruff format src/ tests/ ui/
 # Type check
 mypy src/
 
-# Tests (272 passing, 80%+ coverage required)
+# Tests (279 passing, 80%+ coverage required)
 pytest tests/ -v --cov=src --cov-fail-under=80
 ```
 

@@ -396,11 +396,11 @@ The current architecture runs all components on a single server (or via Docker C
 
 **Key scaling decisions:**
 
-1. **API servers are stateless** -- no in-memory state beyond the rate limiter (which would need Redis in a multi-instance setup)
+1. **API servers hold only rebuildable in-memory state** -- the rate limiter and the BM25 keyword index, both reconstructable from their source. A multi-instance setup would move the rate limiter to Redis; each instance builds its own BM25 index from the shared vector store on startup.
 2. **Vector store is the bottleneck** -- ChromaDB is single-process; for > 100K documents, swap to a managed vector DB (Pinecone, Qdrant Cloud, Weaviate)
 3. **Embedding cache** -- Move from file-based to Redis for shared caching across API instances
 4. **Rate limiter** -- Move from in-memory dict to Redis sliding window for distributed rate limiting
-5. **BM25 index** -- Currently rebuilt per-request; for production, maintain a persistent index (e.g., Elasticsearch)
+5. **BM25 index** -- Built once at startup from the persisted corpus and updated on ingestion, then shared across requests in-process. For very large corpora, move to a dedicated keyword index (e.g., Elasticsearch/OpenSearch)
 
 ### Production Readiness Checklist
 

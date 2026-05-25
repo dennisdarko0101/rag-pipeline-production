@@ -178,6 +178,30 @@ class ChromaVectorStore(VectorStore):
         logger.info("documents_deleted", count=len(existing_ids), requested=len(doc_ids))
         return len(existing_ids)
 
+    def get_all_documents(self) -> list[Document]:
+        """Return every document in the collection (content and metadata only).
+
+        Returns:
+            All stored documents, reconstructed from ChromaDB.
+        """
+        result = self._collection.get(include=["documents", "metadatas"])
+        ids = result.get("ids") or []
+        contents = result.get("documents") or []
+        metadatas = result.get("metadatas") or []
+
+        documents: list[Document] = []
+        for i, doc_id in enumerate(ids):
+            documents.append(
+                Document(
+                    doc_id=doc_id,
+                    content=(contents[i] if i < len(contents) else "") or "",
+                    metadata=(metadatas[i] if i < len(metadatas) else {}) or {},
+                )
+            )
+
+        logger.info("get_all_documents", count=len(documents))
+        return documents
+
     def get_stats(self) -> dict:
         """Get collection statistics.
 
