@@ -91,15 +91,16 @@ if len(dataset) == 0:
 llm = LLMFactory.create(provider='${PROVIDER}')
 metrics = RAGMetrics(llm=llm)
 
-# Set up the RAG chain
-from src.retrieval.retriever import HybridRetriever, SemanticRetriever
-from src.retrieval.bm25_retriever import BM25Retriever
+# Set up the RAG chain (mirrors src/api/routes/query.py)
+from src.embeddings.embedder import OpenAIEmbedder
+from src.retrieval.retriever import BM25Retriever, HybridRetriever, SemanticRetriever
 from src.retrieval.reranker import CrossEncoderReranker
 from src.vectorstore.chroma_store import ChromaVectorStore
 from src.generation.chain import RAGChain
 
+embedder = OpenAIEmbedder()
 store = ChromaVectorStore()
-semantic = SemanticRetriever(store)
+semantic = SemanticRetriever(embedder=embedder, vector_store=store)
 bm25 = BM25Retriever()
 retriever = HybridRetriever(semantic=semantic, bm25=bm25)
 reranker = CrossEncoderReranker()
