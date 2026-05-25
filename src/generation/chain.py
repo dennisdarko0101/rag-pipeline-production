@@ -132,7 +132,7 @@ class RAGChain:
         timings["generate_ms"] = round((perf_counter() - stage_start) * 1000, 1)
 
         # --- Stage 4: Parse and validate citations ---
-        valid_sources = {r.document.metadata.get("source", "unknown") for r in results}
+        valid_sources = {r.document.source_label for r in results}
         answer, citations = process_response(raw_answer, valid_sources)
 
         # Build sources list
@@ -168,7 +168,7 @@ class RAGChain:
         """Convert search results to Source objects."""
         return [
             Source(
-                source_name=r.document.metadata.get("source", "unknown"),
+                source_name=r.document.source_label or "unknown",
                 chunk_text=r.document.content[:200],
                 chunk_index=r.document.metadata.get("chunk_index", r.rank),
                 relevance_score=r.score,

@@ -1,5 +1,6 @@
 """Document model used across the RAG pipeline."""
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -24,6 +25,20 @@ class Document(BaseModel):
     def source(self) -> str:
         """Shortcut to metadata['source']."""
         return str(self.metadata.get("source", ""))
+
+    @property
+    def source_label(self) -> str:
+        """Display-friendly source name.
+
+        Returns the bare filename for local file paths (so citations and source
+        cards show "rag_systems.md" rather than an absolute path), and leaves web
+        URLs intact. Splits on both "/" and "\\" so it is correct regardless of
+        the OS the documents were ingested on.
+        """
+        src = self.source
+        if src.startswith(("http://", "https://")):
+            return src
+        return re.split(r"[\\/]", src)[-1] or src
 
     @property
     def char_count(self) -> int:

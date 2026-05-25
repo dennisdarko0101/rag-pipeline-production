@@ -10,8 +10,17 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["Ingest"])
 
 
-def _run_ingestion(source_path: str, doc_type: str) -> tuple[int, int]:
+def _run_ingestion(
+    source_path: str, doc_type: str, display_name: str | None = None
+) -> tuple[int, int]:
     """Run the full ingestion pipeline for a single source.
+
+    Args:
+        source_path: Path or URL to load from.
+        doc_type: Document type hint (currently informational).
+        display_name: Optional name to record as the document's source. Uploads
+            arrive as a temp file, so this preserves the original filename for
+            citations and source cards instead of leaking the temp path.
 
     Returns (documents_processed, chunks_created).
     """
@@ -24,6 +33,10 @@ def _run_ingestion(source_path: str, doc_type: str) -> tuple[int, int]:
 
     loader = get_loader(source_path)
     docs = loader.load(source_path)
+
+    if display_name:
+        for d in docs:
+            d.metadata["source"] = display_name
 
     pipeline = PreprocessingPipeline()
     processed = pipeline.run(docs)
@@ -113,13 +126,24 @@ async def ingest_upload(file: UploadFile, background_tasks: BackgroundTasks) -> 
     logger.info("api_ingest_upload", filename=file.filename, size_bytes=len(content))
 
     try:
-        docs_processed, chunks_created = _run_ingestion(tmp_path, "auto")
+        docs_processed, chunks_created = _run_ingestion(
+            tmp_path, "auto", display_name=file.filename
+        )
     except Exception as e:
-        logger.error("api_ingest_upload_failed", error=str(e))
-        raise HTTPException(status_code=500, detail="Ingestion failed.") from e
+        # Surface the real cause (parse/embedding error) instead of failing opaquely.
+        logger.error("api_ingest_upload_failed", filename=file.filename, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}") from e
     finally:
         # Clean up temp file in background
         background_tasks.add_task(Path(tmp_path).unlink, missing_ok=True)
+
+    # Fail loudly rather than reporting a successful upload that indexed nothing.
+    if chunks_created == 0:
+        logger.warning("api_ingest_upload_empty", filename=file.filename)
+        raise HTTPException(
+            status_code=400,
+            detail=f"No extractable text found in '{file.filename}'. Nothing was indexed.",
+        )
 
     return IngestResponse(
         documents_processed=docs_processed,

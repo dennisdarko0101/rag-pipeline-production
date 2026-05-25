@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from ui.config import API_BASE_URL, API_TIMEOUT
+from ui.config import API_BASE_URL, API_TIMEOUT, EVAL_TIMEOUT
 
 
 def _url(path: str) -> str:
@@ -136,7 +136,7 @@ def evaluate(
         "provider": provider,
     }
     try:
-        r = httpx.post(_url("/api/v1/evaluate"), json=payload, timeout=API_TIMEOUT)
+        r = httpx.post(_url("/api/v1/evaluate"), json=payload, timeout=EVAL_TIMEOUT)
         r.raise_for_status()
         return r.json()
     except httpx.HTTPStatusError as exc:

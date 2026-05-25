@@ -55,7 +55,7 @@ def format_context(results: list[SearchResult], max_chars: int = MAX_CONTEXT_CHA
     total_len = 0
 
     for i, result in enumerate(results):
-        source = result.document.metadata.get("source", "unknown")
+        source = result.document.source_label or "unknown"
         chunk_idx = result.document.metadata.get("chunk_index", i)
 
         section = f"[{i + 1}] Source: {source}, Chunk {chunk_idx}\n{result.document.content}"

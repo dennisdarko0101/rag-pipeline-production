@@ -14,6 +14,41 @@ from ui import api_client
 from ui.components import metric_card, pipeline_timeline, source_card, status_indicator
 from ui.config import COLORS, PAGE_ICON, PAGE_LAYOUT, PAGE_TITLE
 
+
+def _render_response_details(sources: list, metadata: dict) -> None:
+    """Show retrieved sources and the pipeline panel.
+
+    With the wide layout there is room to place them side by side, which keeps
+    a typical answer from stacking tall. Falls back to a single full-width panel
+    when only one of the two is present.
+    """
+
+    def _sources_panel() -> None:
+        with st.expander(f"Sources ({len(sources)} chunks)", expanded=False):
+            for src in sources:
+                source_card(
+                    source_name=src["source_name"],
+                    chunk_text=src["chunk_text"],
+                    chunk_index=src["chunk_index"],
+                    relevance_score=src["relevance_score"],
+                )
+
+    def _pipeline_panel() -> None:
+        with st.expander("Pipeline Metrics", expanded=False):
+            pipeline_timeline(metadata)
+
+    if sources and metadata:
+        col_src, col_pipe = st.columns([3, 2])
+        with col_src:
+            _sources_panel()
+        with col_pipe:
+            _pipeline_panel()
+    elif sources:
+        _sources_panel()
+    elif metadata:
+        _pipeline_panel()
+
+
 # ---------------------------------------------------------------------------
 # Page setup
 # ---------------------------------------------------------------------------
@@ -24,15 +59,94 @@ st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout=PAGE_LAYOU
 st.markdown(
     f"""
     <style>
-        /* Force dark backgrounds for custom HTML cards */
         .stApp {{ background-color: {COLORS["bg_surface"]}; }}
-        .stTabs [data-baseweb="tab-list"] {{ gap: 8px; }}
-        .stTabs [data-baseweb="tab"] {{
-            padding: 8px 20px;
-            border-radius: 6px 6px 0 0;
+
+        /* Cleaner chrome: hide Streamlit's menu/footer, keep a roomy layout */
+        #MainMenu, footer {{ visibility: hidden; }}
+        header[data-testid="stHeader"] {{ background: transparent; }}
+        /* Use the full wide-layout width (no narrow max-width cap) */
+        .block-container {{ max-width: 100%; padding-top: 1rem; padding-bottom: 1.5rem; }}
+
+        /* Compact vertical rhythm so the key content fits a normal viewport */
+        [data-testid="stVerticalBlock"] {{ gap: 0.55rem; }}
+        h1, h2, h3, h4 {{
+            margin-top: 0.1rem !important;
+            margin-bottom: 0.3rem !important;
+            line-height: 1.25 !important;
         }}
-        /* Tighter chat messages */
-        .stChatMessage {{ padding: 0.6rem 1rem; }}
+        h3 {{ font-size: 1.15rem !important; }}
+        h4 {{ font-size: 1.0rem !important; }}
+        [data-testid="stCaptionContainer"] {{ margin-top: -0.15rem; }}
+        hr {{ margin: 0.6rem 0 !important; }}
+
+        /* Tabs */
+        .stTabs [data-baseweb="tab-list"] {{ gap: 6px; }}
+        .stTabs [data-baseweb="tab"] {{
+            padding: 6px 16px;
+            border-radius: 8px 8px 0 0;
+            font-weight: 600;
+        }}
+
+        /* Chat messages read as tidy cards */
+        .stChatMessage {{
+            background: {COLORS["bg_card"]};
+            border: 1px solid {COLORS["border"]};
+            border-radius: 12px;
+            padding: 0.6rem 0.95rem;
+            margin-bottom: 0.4rem;
+            line-height: 1.55;
+        }}
+
+        /* Buttons */
+        .stButton > button {{ border-radius: 8px; font-weight: 600; }}
+
+        /* Readability ---------------------------------------------------- */
+
+        /* Default = dark main panel: near-white headings and body text,
+           fully opaque. Scoped to headings + markdown paragraphs/lists so it
+           never overrides the source/metric cards (those use inline styles on
+           divs, which have no <p>). */
+        h1, h2, h3, h4,
+        .stMarkdown p, .stMarkdown li {{
+            color: {COLORS["text"]} !important;
+            opacity: 1 !important;
+        }}
+        [data-testid="stCaptionContainer"],
+        [data-testid="stCaptionContainer"] p {{
+            color: {COLORS["text_secondary"]} !important;
+        }}
+
+        /* Expander labels ("Sources (N chunks)", "Pipeline Metrics") */
+        [data-testid="stExpander"] summary,
+        [data-testid="stExpander"] summary p,
+        [data-testid="stExpander"] summary span,
+        .streamlit-expanderHeader,
+        .streamlit-expanderHeader p {{
+            color: {COLORS["text"]} !important;
+            opacity: 1 !important;
+        }}
+
+        /* Light sidebar: dark, legible text. These selectors are more specific
+           than the defaults above, so they win for everything in the sidebar. */
+        [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
+        [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4,
+        [data-testid="stSidebar"] .stMarkdown p,
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {{
+            color: {COLORS["sidebar_text"]} !important;
+        }}
+        [data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+        [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
+        [data-testid="stSidebar"] small,
+        [data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"],
+        [data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"] * {{
+            color: {COLORS["sidebar_text_secondary"]} !important;
+        }}
+
+        /* Hide the Streamlit "Deploy" button in the top-right */
+        [data-testid="stAppDeployButton"],
+        [data-testid="stDeployButton"],
+        .stDeployButton {{ display: none !important; }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -56,7 +170,7 @@ with st.sidebar:
         f"""
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
             <span style="font-size:1.6rem;">{PAGE_ICON}</span>
-            <span style="font-size:1.3rem; font-weight:700; color:{COLORS["text"]};">
+            <span style="font-size:1.3rem; font-weight:700; color:{COLORS["sidebar_text"]};">
                 RAG Pipeline
             </span>
         </div>
@@ -139,8 +253,24 @@ with st.sidebar:
             )
 
 # ---------------------------------------------------------------------------
-# Main area — tabs
+# Main area — header + tabs
 # ---------------------------------------------------------------------------
+
+st.markdown(
+    f"""
+    <div style="margin-bottom:2px;">
+        <h1 style="margin:0; font-size:1.4rem; font-weight:700; color:{COLORS["text"]};">
+            RAG Pipeline
+        </h1>
+        <p style="margin:3px 0 0 0; color:{COLORS["text_secondary"]}; font-size:0.9rem;">
+            Ask a question and get an answer grounded in your documents, with the exact
+            sources it drew from.
+        </p>
+    </div>
+    <hr style="border:none; border-top:1px solid {COLORS["border"]}; margin:8px 0 2px 0;" />
+    """,
+    unsafe_allow_html=True,
+)
 
 tab_chat, tab_eval = st.tabs(["\U0001f4ac  Chat", "\U0001f4ca  Evaluation"])
 
@@ -153,22 +283,7 @@ with tab_chat:
 
             # Show expandable details for assistant messages
             if msg["role"] == "assistant" and "sources" in msg:
-                sources = msg["sources"]
-                metadata = msg.get("metadata", {})
-
-                if sources:
-                    with st.expander(f"Sources ({len(sources)} chunks)", expanded=False):
-                        for src in sources:
-                            source_card(
-                                source_name=src["source_name"],
-                                chunk_text=src["chunk_text"],
-                                chunk_index=src["chunk_index"],
-                                relevance_score=src["relevance_score"],
-                            )
-
-                if metadata:
-                    with st.expander("Pipeline Metrics", expanded=False):
-                        pipeline_timeline(metadata)
+                _render_response_details(msg["sources"], msg.get("metadata", {}))
 
     # Chat input
     if user_input := st.chat_input("Ask a question about your documents..."):
@@ -199,19 +314,7 @@ with tab_chat:
 
                 st.markdown(answer)
 
-                if sources:
-                    with st.expander(f"Sources ({len(sources)} chunks)", expanded=False):
-                        for src in sources:
-                            source_card(
-                                source_name=src["source_name"],
-                                chunk_text=src["chunk_text"],
-                                chunk_index=src["chunk_index"],
-                                relevance_score=src["relevance_score"],
-                            )
-
-                if metadata:
-                    with st.expander("Pipeline Metrics", expanded=False):
-                        pipeline_timeline(metadata)
+                _render_response_details(sources, metadata)
 
                 st.session_state.chat_history.append(
                     {
@@ -247,7 +350,10 @@ with tab_eval:
                 for p in data["pairs"]
             ]
 
-            with st.spinner("Running evaluation — this may take a few minutes..."):
+            with st.spinner(
+                f"Evaluating {len(qa_pairs)} questions — each runs the full pipeline plus "
+                "LLM-judge scoring, so this can take several minutes. Please keep this tab open."
+            ):
                 result = api_client.evaluate(
                     qa_pairs=qa_pairs,
                     k=k,
@@ -278,7 +384,7 @@ with tab_eval:
             metric_card(
                 "Avg Latency",
                 None,
-                description=f"{eval_result.get('avg_latency_ms', 0):.0f} ms",
+                value_text=f"{eval_result.get('avg_latency_ms', 0):.0f} ms",
             )
 
         # Per-question results table
@@ -301,7 +407,9 @@ with tab_eval:
                         "Sources": r["num_sources"],
                     }
                 )
-            st.dataframe(table_rows, use_container_width=True, hide_index=True)
+            # Fixed-height scroll box (~6 rows visible) so the full table does
+            # not push the rest of the page down.
+            st.dataframe(table_rows, use_container_width=True, hide_index=True, height=245)
         else:
             st.info("No per-question results available.")
 

@@ -178,22 +178,56 @@ Because the boundary is HTTP only, the Streamlit front end could be replaced wit
 
 ## Evaluation
 
-Four LLM-as-judge metrics, each scored 0.0 to 1.0 with an explanation:
+It is easy to make a RAG system that looks like it works. The evaluation is how you find out whether it actually does, and whether a change made things better or worse.
 
-| Metric | What it measures | CI threshold |
-|--------|-----------------|-------------|
-| **Faithfulness** | Are claims supported by the retrieved context? | >= 0.70 |
-| **Answer Relevancy** | Does the answer address the question? | >= 0.70 |
-| **Context Precision** | Are the retrieved contexts relevant? | Monitored |
-| **Context Recall** | Is the needed information present in the context? | Monitored |
+### What it does
 
-The golden dataset holds 18 Q&A pairs across four categories: straightforward, multi-chunk, unanswerable, and adversarial. A weekly GitHub Actions job runs the evaluation and opens an issue if quality drops below the thresholds.
+The evaluation takes a fixed set of test questions whose correct answers are already known (the "golden dataset"), runs every question through the full pipeline, and then grades each answer the system produced. You get a score per question and an average across the whole set, so you can compare runs and catch regressions instead of guessing.
+
+The golden dataset here is 18 question-and-answer pairs across four kinds of question: straightforward lookups, ones whose answer is spread across several chunks, ones the system should refuse because the answer is not in the documents, and adversarial ones designed to bait a wrong answer. That mix tests both "can it find the answer" and "does it know when to stay quiet."
+
+### What each score means
+
+Every metric is a number from 0.0 to 1.0, produced by a second LLM acting as a grader (the "judge"):
+
+| Metric | In plain terms | CI threshold |
+|--------|----------------|-------------|
+| **Faithfulness** | Is the answer actually backed by the retrieved text, rather than made up? A high score means every claim traces back to the context. | >= 0.70 |
+| **Answer Relevancy** | Does the answer actually address the question that was asked, instead of drifting off topic? | >= 0.70 |
+| **Context Precision** | Of the chunks that were retrieved, how many were genuinely relevant to the question? | Monitored |
+| **Context Recall** | Did the retrieved chunks contain the information needed to answer? (Computed by the full `make eval` run.) | Monitored |
+
+Faithfulness and answer relevancy are the two that gate CI; the context metrics are tracked so you can see retrieval quality move over time.
+
+### Reading the scores
+
+The dashboard colours each score so you can read it at a glance:
+
+- **Good (green): 0.80 and above.** The answer is well grounded and on topic.
+- **Fair (yellow): 0.60 to 0.79.** Usable but with something to tighten.
+- **Poor (red): below 0.60.** Worth investigating.
+
+As a rough feel, faithfulness and answer relevancy sitting in the 0.7 to 0.9 range mean the answers are trustworthy and address the question. The context metrics tend to run lower, which is expected and explained next.
+
+### Why context precision reads lower here
+
+The judge only sees the short retrieved snippets, roughly the first 200 characters of each chunk, not the full passage. So when the useful sentence sits just past that cutoff, the judge fairly marks the chunk "not relevant" even though the pipeline did retrieve something useful. A low context precision is therefore mostly a signal about retrieval, not about the generated answer.
+
+Three things move it, in rough order of impact:
+
+- **Chunk size:** larger chunks keep more of the relevant text together, so the relevant part is more likely to be inside what the judge sees.
+- **Retrieval k:** how many chunks you pull before reranking. Too few can miss the right passage; too many dilute precision.
+- **Reranking:** a sharper cross-encoder keeps the genuinely relevant chunks at the top and pushes the noise down.
+
+### How the judge and golden dataset work
+
+The golden dataset is just a hand-written JSON file of question plus expected-answer pairs (`tests/eval/eval_dataset.json`). The judge is another LLM call: for each metric, the question, the answer, the retrieved context, and (where relevant) the expected answer are dropped into a scoring prompt that asks the model to return a number from 0 to 1 with a short explanation. It is the same idea as a human grader reading an answer against the source material, automated so it can run on every change and on a weekly schedule. A GitHub Actions job runs it weekly and opens an issue if faithfulness or answer relevancy falls below threshold.
 
 ```bash
-make eval    # Run evaluation locally
+make eval    # Run the full evaluation locally
 ```
 
-See [docs/EVALUATION.md](docs/EVALUATION.md) for the full methodology.
+You can also run it from the Evaluation tab in the dashboard. See [docs/EVALUATION.md](docs/EVALUATION.md) for the full methodology.
 
 ## Tech Stack
 
