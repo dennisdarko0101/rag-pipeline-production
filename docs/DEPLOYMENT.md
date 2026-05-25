@@ -11,7 +11,7 @@
 
 ```bash
 # 1. Clone and enter the project
-git clone https://github.com/dennisdarko/rag-pipeline-production.git
+git clone https://github.com/dennisdarko0101/rag-pipeline-production.git
 cd rag-pipeline-production
 
 # 2. Create virtual environment
@@ -323,7 +323,7 @@ sudo yum install -y docker docker-compose-plugin   # Amazon Linux
 sudo systemctl start docker
 
 # 3. Clone and configure
-git clone https://github.com/dennisdarko/rag-pipeline-production.git
+git clone https://github.com/dennisdarko0101/rag-pipeline-production.git
 cd rag-pipeline-production
 cp .env.example .env
 # Edit .env with your API keys

@@ -33,7 +33,7 @@ LABEL maintainer="Dennis Darko"
 LABEL org.opencontainers.image.title="rag-pipeline"
 LABEL org.opencontainers.image.description="Production-grade RAG pipeline with hybrid search, reranking, and dual-LLM generation"
 LABEL org.opencontainers.image.version="0.1.0"
-LABEL org.opencontainers.image.source="https://github.com/dennisdarko/rag-pipeline-production"
+LABEL org.opencontainers.image.source="https://github.com/dennisdarko0101/rag-pipeline-production"
 LABEL org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app

@@ -23,7 +23,7 @@ class Document(BaseModel):
     @property
     def source(self) -> str:
         """Shortcut to metadata['source']."""
-        return self.metadata.get("source", "")
+        return str(self.metadata.get("source", ""))
 
     @property
     def char_count(self) -> int:

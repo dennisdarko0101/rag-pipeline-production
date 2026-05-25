@@ -6,7 +6,7 @@ Thanks for your interest in contributing to the RAG Pipeline project!
 
 ```bash
 # Clone the repository
-git clone https://github.com/dennisdarko/rag-pipeline-production.git
+git clone https://github.com/dennisdarko0101/rag-pipeline-production.git
 cd rag-pipeline-production
 
 # Create virtual environment
@@ -58,7 +58,7 @@ make test-cov   # pytest with coverage
 - `tests/` -- Unit and integration tests (all external APIs mocked)
 - `ui/` -- Streamlit dashboard (communicates with backend via HTTP only)
 - `docker/` -- Dockerfiles and compose configuration
-- `docs/` -- Architecture, deployment, evaluation, and handoff documentation
+- `docs/` -- Architecture, deployment, and evaluation documentation
 
 ## Adding Tests
 

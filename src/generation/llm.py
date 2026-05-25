@@ -139,7 +139,7 @@ class ClaudeLLM(BaseLLM):
     def generate(self, prompt: str, system: str | None = None) -> str:
         start = perf_counter()
         response = self._call_api(prompt, system)
-        text = response.content[0].text
+        text: str = response.content[0].text
         elapsed = perf_counter() - start
 
         input_tok = response.usage.input_tokens
@@ -158,7 +158,7 @@ class ClaudeLLM(BaseLLM):
     async def agenerate(self, prompt: str, system: str | None = None) -> str:
         start = perf_counter()
         response = await self._acall_api(prompt, system)
-        text = response.content[0].text
+        text: str = response.content[0].text
         elapsed = perf_counter() - start
 
         input_tok = response.usage.input_tokens

@@ -84,7 +84,8 @@ class EmbeddingCache:
                 return None
 
         self._hits += 1
-        return data["embedding"]
+        embedding: list[float] = data["embedding"]
+        return embedding
 
     def set(self, text: str, model: str, embedding: list[float]) -> None:
         """Store an embedding in the cache.
@@ -104,11 +105,11 @@ class EmbeddingCache:
         }
         path.write_text(json.dumps(data), encoding="utf-8")
 
-    def stats(self) -> dict[str, int]:
+    def stats(self) -> dict[str, float]:
         """Return cache statistics.
 
         Returns:
-            Dictionary with hits, misses, and total cached files.
+            Dictionary with hits, misses, total cached files, and hit rate.
         """
         total_files = sum(1 for _ in self._cache_dir.rglob("*.json"))
         return {

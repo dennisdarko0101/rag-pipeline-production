@@ -114,7 +114,8 @@ class OpenAIEmbedder(BaseEmbedder):
             original_tokens=len(tokens),
             limit=self._token_limit,
         )
-        return self._encoding.decode(tokens[: self._token_limit])
+        truncated: str = self._encoding.decode(tokens[: self._token_limit])
+        return truncated
 
     @retry(
         stop=stop_after_attempt(3),
@@ -169,7 +170,7 @@ class OpenAIEmbedder(BaseEmbedder):
         """
         start = perf_counter()
         truncated = self.truncate_text(text)
-        result = self._call_api([truncated])[0]
+        result: list[float] = self._call_api([truncated])[0]
         elapsed = perf_counter() - start
 
         logger.info(

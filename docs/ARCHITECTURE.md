@@ -36,7 +36,7 @@ Document File/URL
        │
        ▼
 ┌─────────────┐     Loader detects format from extension/URL.
-│  Loader     │     PDFLoader: page-level extraction via PyPDF2
+│  Loader     │     PDFLoader: page-level extraction via pypdf
 │  (factory)  │     MarkdownLoader: extracts H1 title as metadata
 │             │     WebLoader: httpx fetch + BeautifulSoup (strips nav/footer/script)
 └──────┬──────┘

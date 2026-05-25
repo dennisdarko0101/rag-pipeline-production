@@ -33,7 +33,8 @@ def _call_llm(prompt: str) -> str:
                 temperature=settings.llm_temperature,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return response.content[0].text
+            text: str = response.content[0].text
+            return text
         except Exception as e:
             logger.warning("claude_call_failed", error=str(e))
 

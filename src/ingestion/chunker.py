@@ -1,6 +1,8 @@
 """Chunking strategies for splitting documents into smaller pieces."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -88,7 +90,7 @@ class SemanticChunker(BaseChunker):
 
     def __init__(
         self,
-        embedding_fn: callable | None = None,
+        embedding_fn: Callable[..., Any] | None = None,
         similarity_threshold: float = 0.5,
         max_chunk_size: int | None = None,
     ) -> None:

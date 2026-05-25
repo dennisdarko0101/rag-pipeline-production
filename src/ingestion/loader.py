@@ -6,7 +6,7 @@ from pathlib import Path
 
 import httpx
 from bs4 import BeautifulSoup
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 
 from src.models.document import Document
 from src.utils.logger import get_logger
@@ -30,7 +30,7 @@ class DocumentLoader(ABC):
 
 
 class PDFLoader(DocumentLoader):
-    """Extract text from PDF files using PyPDF2."""
+    """Extract text from PDF files using pypdf."""
 
     def load(self, source: str) -> list[Document]:
         path = Path(source)

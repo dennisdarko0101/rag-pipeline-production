@@ -76,6 +76,7 @@ class CrossEncoderReranker(BaseReranker):
 
         start = perf_counter()
         self._load_model()
+        assert self._model is not None  # set by _load_model
 
         # Build (query, document) pairs for scoring
         pairs = [[query, r.document.content] for r in results]
